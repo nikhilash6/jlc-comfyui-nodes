@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green)]()
 ![Status](https://img.shields.io/badge/status-active-brightgreen)
 
-Custom workflow-oriented nodes for ComfyUI focused on Flux pipelines, LoRA experimentation, ControlNet utilities, and advanced inpainting/outpainting workflows. Developed by
+A collection of workflow-focused ComfyUI nodes designed to simplify advanced image generation pipelines. Includes tools for flexible image padding and mask merging to enable inpainting and outpainting in a single pass, structured ControlNet application, sequential LoRA stacking (up to 10 LoRAs), a two LoRA loader with block-weight control, and reusable components for Flux-based workflows and complex image generation pipelines. Developed by
 **J. L. Córdova**.
 
 These nodes focus on improving practical workflows for modern image
