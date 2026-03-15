@@ -4,9 +4,9 @@
   <img src="assets/icons/jlc-comfyui-nodes_Logo-0512.png" width="120">
 </p>
 
-[![ComfyUI Registry](https://img.shields.io/badge/ComfyUI-Registry-blue)](https://registry.comfy.org/packages/jlc-comfyui-nodes)
-![ComfyUI](https://img.shields.io/badge/ComfyUI-Custom%20Nodes-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
+[![ComfyUI Registry](https://img.shields.io/badge/Available%20on-ComfyUI%20Registry-blue)](https://registry.comfy.org/packages/jlc-comfyui-nodes)
+[![ComfyUI](https://img.shields.io/badge/ComfyUI-Custom%20Nodes-blue)]()
+[![License](https://img.shields.io/badge/license-MIT-green)]()
 ![Status](https://img.shields.io/badge/status-active-brightgreen)
 
 Custom workflow-oriented nodes for ComfyUI focused on Flux pipelines, LoRA experimentation, ControlNet utilities, and advanced inpainting/outpainting workflows. Developed by
