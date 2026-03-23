@@ -1,7 +1,9 @@
 # JLC ComfyUI Nodes
 
 <p align="center">
-  <img src="assets/icons/jlc-comfyui-nodes_Logo-0512.png" width="120">
+  <img src="assets/icons/jlc-comfyui-nodes_Logo-0512.png" width="120" style="vertical-align: middle;">
+  &nbsp;&nbsp;&nbsp;
+  <img src="assets/icons/jlc-comfyui-nodes_Logo-Dark-0512.png" width="120" style="vertical-align: middle;">
 </p>
 
 [![ComfyUI Registry](https://img.shields.io/badge/Available%20on-ComfyUI%20Registry-blue)](https://registry.comfy.org/packages/jlc-comfyui-nodes)
@@ -9,11 +11,10 @@
 [![License](https://img.shields.io/badge/license-MIT-green)]()
 ![Status](https://img.shields.io/badge/status-active-brightgreen)
 
-A collection of workflow-focused ComfyUI nodes designed to simplify advanced image generation pipelines. Includes tools for flexible image padding and mask merging to enable inpainting and outpainting in a single pass, structured ControlNet application, sequential LoRA stacking (up to 10 LoRAs), a two LoRA loader with block-weight control, and reusable components for Flux-based workflows and complex image generation pipelines. Developed by
+A collection of workflow-focused ComfyUI nodes designed to simplify advanced image generation pipelines. Includes tools for flexible image padding and mask merging to enable inpainting and outpainting in a single pass, structured ControlNet application pipelines, sequential LoRA stacking (up to 10 LoRAs), a two LoRA loader with block-weight control, and reusable components for Flux-based workflows and complex image generation pipelines. Developed by
 **J. L. Córdova**.
 
-These nodes focus on improving practical workflows for modern image
-generation pipelines, particularly:
+These nodes are designed for:
 
 - Flux workflows
 - LoRA experimentation
@@ -28,7 +29,20 @@ https://github.com/Damkohler/jlc-comfyui-nodes
 ## Example Workflows
 PNG workflows contain the embedded ComfyUI graph and can be dragged directly into the ComfyUI canvas.
 
-### Basic Inpainting / Outpainting Workflow
+### ControlNet Workflow Using JLC ControlNet Apply (Advanced)
+
+<p align="center">
+  <img src="assets/workflows/jlc_ControlNet_Apply_(Advanced)-Workflow.png" width="900">
+</p>
+
+<p align="center">
+  <a href="assets/workflows/jlc_ControlNet_Apply_(Advanced)-Workflow.png">Download PNG</a> •
+  <a href="assets/workflows/jlc_ControlNet_Apply_(Advanced)-Workflow.json">Download JSON</a>
+</p>
+
+---
+
+### Basic Inpainting / Outpainting Workflow Using JLC Padded Image
 
 <p align="center">
   <img src="assets/workflows/jlc_padded_image_Basic_Infill_Outfill.png" width="900">
@@ -41,7 +55,7 @@ PNG workflows contain the embedded ComfyUI graph and can be dragged directly int
 
 ---
 
-### Preferred Inpainting / Outpainting Workflow
+### Preferred Inpainting / Outpainting Workflow Using JLC Padded Image
 
 <p align="center">
   <img src="assets/workflows/jlc_padded_image_Best_Infill_Outfill.png" width="900">
@@ -107,7 +121,8 @@ appropriate workflow categories.
 |-----|--------|
 | **JLC Padded Image** | Canvas preparation for inpainting and outpainting workflows |
 | **JLC Padded Latent** | Combined padded-image + latent + mask conditioning pipeline |
-| **JLC ControlNet Apply** | Simplified ControlNet application node |
+| **JLC ControlNet Apply** | Legacy node (superseded by Advanced version) |
+| **JLC ControlNet Apply (Advanced)** | Improved ControlNet application with Lazy Loading and Memory Caching |
 | **JLC 10 LoRA Loader Stack** | Sequential loader for up to 10 LoRAs |
 | **JLC LoRA Loader (Block Weight)** | Multi-slot LoRA loader with block weight control |
 
@@ -129,11 +144,7 @@ by placing them on a new canvas with a specified aspect ratio and size.
 - Optional manual mask merging
 - Deterministic padding behavior
 
-Designed to work particularly well with inpainting models such as:
-
-```
-flux1-fill-dev
-```
+Designed to work particularly well with inpainting models such as `flux1-fill-dev`.
 
 ---
 
@@ -159,17 +170,35 @@ This node simplifies building **reusable inpainting pipelines**.
 
 ## JLC ControlNet Apply
 
-A streamlined node for applying **ControlNet conditioning**
-within a generation pipeline.
+A streamlined node for applying **ControlNet conditioning** within a generation pipeline. This is a legacy version. The recommended node is JLC ControlNet Apply (Advanced), which includes caching and lazy loading improvements.
 
 ### Design Goals
 
 - simplified parameter handling
-- improved workflow clarity
+- improved workflow clarity when daisy chaining ControlNet models
 - compatibility with Flux-based pipelines
 
 This node adapts the built-in **ComfyUI ControlNet application logic**
 for cleaner integration into custom workflows.
+
+---
+
+## JLC ControlNet Apply (Advanced)
+
+This node is especially useful for multi-ControlNet workflows that would otherwise exceed VRAM limits. This is the recommended version of the JLC ControlNet Apply node.
+
+It introduces:
+
+- global model caching (prevents duplicate VRAM usage)
+- lazy loading (no load when disabled or strength = 0)
+- dual input modes (dropdown OR upstream ControlNet object)
+- improved chaining behavior for complex pipelines
+
+### Why this matters
+
+- Prevents repeated ControlNet loading → reduces VRAM usage
+- Enables stable multi-ControlNet workflows
+- Simplifies complex pipeline design
 
 ---
 
