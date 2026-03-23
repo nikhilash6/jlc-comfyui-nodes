@@ -1,6 +1,6 @@
 [project]
 name = "jlc-comfyui-nodes"
-version = "1.1.0"
+version = "1.1.1"
 description = "A collection of workflow-focused ComfyUI nodes designed to simplify, standardize, and optimize advanced image generation pipelines. Includes image padding and unified mask generation for combined inpainting and outpainting workflows, along with structured ControlNet application through the JLC ControlNet Apply (Advanced) node. This node features lazy loading and global ControlNet caching to eliminate duplicate model loads and significantly reduce VRAM usage in complex graphs. The package also includes flexible LoRA utilities, such as a sequential loader stack (up to 10 LoRAs) and a block-weight-enabled loader for fine-grained layer control. Designed for Flux-based pipelines, reusable workflow construction, and efficient experimentation with modern diffusion models."
 authors = [
     { name = "J. L. Córdova", email = "jose.l.cordova@gmail.com" }
