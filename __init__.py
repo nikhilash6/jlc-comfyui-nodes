@@ -35,13 +35,12 @@ JLC ComfyUI Custom Nodes
 # __init__.py  (JLC-Tests-comfyui)
 
 import os
-from server import PromptServer
-from aiohttp import web
+from server import PromptServer  # used for static route mounting
 
 from .nodes.jlc_padded_image import JLC_PaddedImage
 from .nodes.jlc_padded_latent import JLC_PaddedLatent
 from .nodes.jlc_controlnet_apply import JLC_ControlNetApply
-from .nodes.jlc_controlnet_apply_advanced import JLC_ControlNetApplyAdvanced
+# from .nodes.jlc_controlnet_apply_advanced import JLC_ControlNetApplyAdvanced
 from .nodes.jlc_lora_loader_ten_stack import JLC_LoraLoaderTenStack
 from .nodes.jlc_lora_loader_block_weight_two import JLC_LoraLoaderBlockWeightTwo
 
@@ -49,7 +48,7 @@ NODE_CLASS_MAPPINGS = {
     "JLC_PaddedImage": JLC_PaddedImage,
     "JLC_PaddedLatent": JLC_PaddedLatent,
     "JLC_ControlNetApply": JLC_ControlNetApply,
-    "JLC_ControlNetApplyAdvanced": JLC_ControlNetApplyAdvanced,
+    # "JLC_ControlNetApplyAdvanced": JLC_ControlNetApplyAdvanced,
     "JLC_LoraLoaderTenStack": JLC_LoraLoaderTenStack,
     "JLC_LoraLoaderBlockWeightTwo": JLC_LoraLoaderBlockWeightTwo,
 }
@@ -59,7 +58,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "JLC_PaddedImage": "\u2003JLC Padded Image",
     "JLC_PaddedLatent": "\u2003JLC Padded Latent",
     "JLC_ControlNetApply": "\u2003JLC ControlNet Apply",
-    "JLC_ControlNetApplyAdvanced": "\u2003JLC ControlNet Apply (Advanced)",
+    # "JLC_ControlNetApplyAdvanced": "\u2003JLC ControlNet Apply (Advanced)",
     "JLC_LoraLoaderTenStack": "\u2003JLC 10-LoRA Loader",
     "JLC_LoraLoaderBlockWeightTwo": "\u2003JLC 2-LoRA Loader - Block Weight",
 }
@@ -73,8 +72,10 @@ WEB_DIRECTORY = "web"
 WEB_DIR = os.path.join(os.path.dirname(__file__), "web")
 
 # Mount it into ComfyUI frontend
+ps = PromptServer.instance
+
 if os.path.exists(WEB_DIR):
-    PromptServer.instance.app.router.add_static(
+    ps.app.router.add_static(
         "/extensions/JLC-ComfyUI-nodes",
         WEB_DIR
     )
