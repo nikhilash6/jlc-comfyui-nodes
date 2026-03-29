@@ -14,36 +14,49 @@ JLC ControlNet Apply (Advanced)
         • LoRA experimentation
         • advanced inpainting / outpainting pipelines
 
-
 - Node Purpose
-  - The **JLC ControlNet Apply (Advanced)** node applies a ControlNet
-    to both positive and negative conditioning streams.
+    - The **JLC ControlNet Apply (Advanced)** node applies a ControlNet
+        to both positive and negative conditioning streams.
 
-  - This version integrates **ControlNet loading directly into the node**
-    while preserving ComfyUI's stateless execution model.
+    - This version integrates **ControlNet loading, reuse, and session-level caching**
+        directly into the node while preserving ComfyUI's stateless execution model.
 
-  - The node supports two ControlNet sources:
-        • Upstream `control_net` input (preferred for chaining)
-        • Internal loading via `control_net_name` dropdown
+    - The node supports three ControlNet sourcing modes:
+            • Upstream `control_net` input (direct chained reuse)
+            • Internal LRU cache (wireless reuse across nodes/runs)
+            • Internal loading via `control_net_name` dropdown
 
-  - ControlNet source priority:
-        1. If `control_net` input is connected → reuse the provided object
-        2. Otherwise → load from `control_net_name`
+    - ControlNet source priority:
+            1. If `control_net` input is connected → reuse the provided object
+            2. Otherwise, if present in cache → reuse cached object (wireless)
+            3. Otherwise → load from disk via `control_net_name`
 
-  - This enables efficient **daisy-chained ControlNet workflows**, where:
-        • The model is loaded once at the start of the chain
-        • Subsequent nodes reuse the same ControlNet via pass-through
-        • No global caching or shared state is introduced
+    - The node implements a **bounded LRU cache**:
+            • Stores a limited number of ControlNet models in system RAM
+            • Automatically evicts least recently used models
+            • Prevents unbounded memory growth
 
-  - When disabled (or strength = 0):
-        • No ControlNet is loaded
-        • All inputs pass through unchanged
+    - Cached ControlNet objects are protected by a **self-healing safeguard**:
+            • Models are marked as “dirty” after use
+            • Cached instances are cleaned (`cleanup()`) before reuse
+            • Prevents reuse of mutated ControlNet state
 
-  - This design avoids unnecessary model loads within a workflow
-    while remaining fully deterministic and aligned with ComfyUI's
-    memory and execution model.
+    - This enables efficient **daisy-chained and cross-node workflows**, where:
+            • Models can be reused via explicit wiring (deterministic)
+            • Models can also be reused wirelessly when still cached
+            • Redundant disk loads are minimized without unsafe global state
 
-    
+    - When disabled (or strength = 0):
+            • No ControlNet is loaded
+            • All inputs pass through unchanged
+
+    - This design:
+            • Avoids unsafe global mutation
+            • Maintains deterministic behavior within execution chains
+            • Leverages ComfyUI's native VRAM management (no interference)
+            • Improves performance through safe, bounded reuse
+
+   
 - Attribution & License
   - Concept and implementation by **J. L. Córdova**
     with development assistance from **ChatGPT (OpenAI)**.
@@ -66,8 +79,15 @@ MANIFEST = {
     ),
 }
 
+import os
 import folder_paths
 import comfy.controlnet
+
+from collections import OrderedDict
+
+# 🔒 Strong cache (session-level) with eviction policy
+GLOBAL_CONTROLNET_CACHE = OrderedDict()
+MAX_CACHED_CONTROLNETS = 3
 
 # Optional debug flag
 DEBUG = True
@@ -153,66 +173,102 @@ class JLC_ControlNetApplyAdvanced:
         control_net_name=None,
         extra_concat=None,
     ):
-        # 🚫 HARD EXIT → no load, no memory usage
+        # 🚫 HARD EXIT
         if (not enabled) or strength == 0:
+            print(f"[JLC-ControlNet] 😴 Node idle (enabled={enabled})")
             return (positive, negative, vae, control_net)
+
+        print(f"[JLC-ControlNet] 🚀 Node triggered (enabled={enabled}, strength={strength})")
 
         if extra_concat is None:
             extra_concat = []
 
-            # 🔁 Resolve ControlNet source
+        # 🔁 Resolve ControlNet source
+        if control_net is not None:
+            print(f"[JLC-ControlNet] 🔁🔌 Using ControlNet from input connection")
 
-            if control_net is not None:
-                if DEBUG:
-                    print("[JLC-ControlNet] 🔁 Reusing ControlNet via input connection")
+        else:
+            if control_net_name is None:
+                raise RuntimeError("❌ No ControlNet provided or selected.")
+
+            controlnet_path = folder_paths.get_full_path_or_raise(
+                "controlnet",
+                control_net_name
+            )
+
+            # 🔒 Check strong cache
+            if controlnet_path in GLOBAL_CONTROLNET_CACHE:
+                control_net = GLOBAL_CONTROLNET_CACHE[controlnet_path]
+
+                # 🔁 mark as recently used (LRU)
+                GLOBAL_CONTROLNET_CACHE.move_to_end(controlnet_path)
+
+                print(f"[JLC-ControlNet] 🔁📡 Wireless reuse of ControlNet '{control_net_name}' from cache")
+
+                # 🧠 SELF-HEALING SAFEGUARD (only on reuse)
+                if getattr(control_net, "_jlc_dirty", False):
+                    print(f"[JLC-ControlNet] 🧽 Cleaning cached ControlNet before reuse")
+                    control_net.cleanup()
+                    control_net._jlc_dirty = False
 
             else:
-                # 🔒 Validate dropdown selection (handles None / "" edge cases)
-                if not control_net_name:
-                    raise RuntimeError("No ControlNet provided or selected.")
-
-                if DEBUG:
-                    print(f"[JLC-ControlNet] ✅ Loading ControlNet '{control_net_name}'")
-
-                controlnet_path = folder_paths.get_full_path_or_raise(
-                    "controlnet",
-                    control_net_name
-                )
+                print(f"[JLC-ControlNet] 💾 Loading ControlNet '{control_net_name}' from disk")
 
                 control_net = comfy.controlnet.load_controlnet(controlnet_path)
 
                 if control_net is None:
-                    raise RuntimeError("❌ No ControlNet provided or selected.")
-                
-        # ---- Core logic (unchanged from original node) ----
+                    raise RuntimeError("❌ Invalid ControlNet model file.")
+
+                GLOBAL_CONTROLNET_CACHE[controlnet_path] = control_net
+
+                # 🔥 Eviction (LRU)
+                if len(GLOBAL_CONTROLNET_CACHE) > MAX_CACHED_CONTROLNETS:
+                    evicted_key, _ = GLOBAL_CONTROLNET_CACHE.popitem(last=False)
+                    print(f"[JLC-ControlNet] 🗑️ Evicted '{os.path.basename(evicted_key)}' from cache")
+
+        # 🔍 Cache debug (always print current state)
+        cache_keys = list(GLOBAL_CONTROLNET_CACHE.keys())
+        print(f"[JLC-ControlNet] 🧠 Cache state ({len(cache_keys)}/{MAX_CACHED_CONTROLNETS}): {cache_keys}")
+        print(f"[JLC-ControlNet] 📊 Cache RAM estimate: ~{len(cache_keys)*2} GB")
+        
+
+        # ------------------------------------------------------------------
+        # ---- Core logic based on Comfy's native node Apply ControlNet ----
 
         control_hint = image.movedim(-1, 1)
         cnets = {}
 
         out = []
-        for conditioning in (positive, negative):
+        for conditioning in [positive, negative]:
             c = []
             for t in conditioning:
                 d = t[1].copy()
 
-                prev_cnet = d.get('control', None)
+                prev_cnet = d.get("control", None)
+
                 if prev_cnet in cnets:
                     c_net = cnets[prev_cnet]
                 else:
-                    c_net = control_net.copy().set_cond_hint(
-                        control_hint,
-                        strength,
-                        (start_percent, end_percent),
-                        vae=vae,
-                        extra_concat=extra_concat
+                    c_net = (
+                        control_net.copy()
+                        .set_cond_hint(
+                            control_hint,
+                            strength,
+                            (start_percent, end_percent),
+                            vae=vae,
+                            extra_concat=extra_concat,
+                        )
                     )
                     c_net.set_previous_controlnet(prev_cnet)
                     cnets[prev_cnet] = c_net
 
-                d['control'] = c_net
-                d['control_apply_to_uncond'] = False
-                n = [t[0], d]
-                c.append(n)
+                d["control"] = c_net
+                d["control_apply_to_uncond"] = False
+                c.append([t[0], d])
+
             out.append(c)
+
+        # 🧠 MARK AS DIRTY (post-use)
+        control_net._jlc_dirty = True
 
         return (out[0], out[1], vae, control_net)
