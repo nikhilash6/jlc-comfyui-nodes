@@ -13,18 +13,99 @@
 
 ---
 
-## ⚠️ Important Notice — ControlNet Apply (Advanced)
+## Featured Node in this Release: JLC ControlNet Apply (Advanced)
 
-The **JLC ControlNet Apply (Advanced)** node has been **temporarily removed** from this repository and the ComfyUI Registry.
+The **JLC ControlNet Apply (Advanced)** node is an extension of ComfyUI’s native ControlNet application logic.
 
-Initial assumptions regarding performance improvements through ControlNet chaining were incorrect.  
-Controlled testing showed that chaining can significantly **increase execution time** due to conditioning complexity and memory behavior within ComfyUI.
+It preserves full compatibility with ComfyUI’s conditioning pipeline while introducing:
 
-The node will return in a future release after:
+- integrated ControlNet loading  
+- bounded session-level caching (LRU)  
+- deterministic reuse across nodes  
+- mutation-safe execution  
 
-- proper instrumentation of ControlNet loading behavior
-- verification of caching effectiveness
-- redesign based on measured performance characteristics
+The node is designed to improve workflow efficiency **without altering ComfyUI’s execution semantics**.
+
+---
+
+### Architecture Overview
+
+#### Stateless Execution
+
+ControlNet application follows ComfyUI’s native pattern:
+
+- `control_net.copy().set_cond_hint(...)`
+- `set_previous_controlnet(...)`
+
+The original ControlNet object is never mutated during execution.
+
+---
+
+#### Three-Tier Model Resolution
+
+ControlNet objects are resolved in strict priority:
+
+1. Wired input (`control_net`)
+2. Internal LRU cache
+3. Disk load (`control_net_name`)
+
+This ensures deterministic behavior while enabling reuse when possible.
+
+---
+
+#### Bounded LRU Cache
+
+- Implemented via `OrderedDict`
+- Configurable size (default: 2–3 models)
+- Session-scoped (cleared on restart)
+
+Behavior:
+- Reuse → `move_to_end()`
+- Overflow → `popitem(last=False)`
+
+Cache reduces redundant disk loads while remaining fully controlled.
+
+---
+
+#### Mutation Safety
+
+Cached ControlNet objects are automatically cleaned before reuse.
+
+This guarantees:
+- no cross-node contamination
+- no cross-run state leakage
+- safe reuse without deep copies
+
+---
+
+#### Determinism
+
+- Wired reuse → fully deterministic  
+- Cached reuse → deterministic via cleanup  
+- No weak references  
+- No GC-dependent behavior  
+
+All reuse paths are explicit and controlled.
+
+---
+
+#### Performance Scope
+
+Improves:
+- ControlNet load efficiency  
+- multi-node reuse within a session  
+
+Does not affect:
+- VRAM usage during sampling  
+- ControlNet compute cost  
+
+VRAM remains managed entirely by ComfyUI.
+
+---
+
+### Design Principle
+
+> Safe reuse requires preserving a clean base object, not avoiding reuse entirely.
 
 ---
 
@@ -48,12 +129,17 @@ https://github.com/Damkohler/jlc-comfyui-nodes
 
 PNG workflows contain the embedded ComfyUI graph and can be dragged directly into the ComfyUI canvas.
 
-### ControlNet Workflow (Legacy / Under Review)
+### ControlNet Workflow
 
-*Note: This workflow references a node currently under review and not included in the active release.*
 <p align="center">
-  <img src="assets/workflows/jlc_ControlNet_Apply_(Advanced)-Workflow.jpg" width="900">
+  <img src="assets/workflows/jlc_ControlNet_Apply_Advanced.png" width="900">
 </p>
+
+<p align="center">
+  <a href="assets/workflows/jlc_ControlNet_Apply_Advanced.png">Download PNG</a> •
+  <a href="assets/workflows/jlc_ControlNet_Apply_Advanced.json">Download JSON</a>
+</p>
+
 
 ---
 
@@ -138,7 +224,7 @@ Restart **ComfyUI** after installation.
 | **JLC Padded Image** | Canvas preparation for inpainting and outpainting workflows |
 | **JLC Padded Latent** | Combined padded-image + latent + mask conditioning pipeline |
 | **JLC ControlNet Apply** | Legacy ControlNet node (simplified application) |
-| ~~JLC ControlNet Apply (Advanced)~~ | *Temporarily removed (under investigation)* |
+| **JLC ControlNet Apply (Advanced)** | Advanced ControlNet application with caching and deterministic reuse |
 | **JLC 10 LoRA Loader Stack** | Sequential loader for up to 10 LoRAs |
 | **JLC LoRA Loader (Block Weight)** | Multi-slot LoRA loader with block weight control |
 
@@ -148,8 +234,7 @@ Restart **ComfyUI** after installation.
 
 ## JLC Padded Image
 
-A utility node that prepares images for **inpainting or outpainting**
-by placing them on a new canvas with a specified aspect ratio and size.
+A utility node that prepares images for **inpainting or outpainting** by placing them on a new canvas with a specified aspect ratio and size.
 
 ### Features
 
@@ -194,22 +279,26 @@ A streamlined node for applying **ControlNet conditioning** within a generation 
 - improved workflow clarity  
 - compatibility with Flux-based pipelines  
 
-This node adapts the built-in **ComfyUI ControlNet application logic**
-for cleaner integration into custom workflows.
+This node adapts the built-in **ComfyUI ControlNet application logic** for cleaner integration into custom workflows.
 
 ---
 
 ## JLC ControlNet Apply (Advanced)
 
-**Status: Under investigation / not currently included**
+An advanced ControlNet application node that combines:
 
-Originally introduced to explore:
+- model loading  
+- deterministic chaining  
+- session-level caching  
 
-- model caching behavior  
-- lazy loading strategies  
-- flexible ControlNet routing  
+### Key Features
 
-However, performance assumptions were incorrect and the node is being redesigned.
+- supports both wired and internal ControlNet sources  
+- avoids redundant model loads via LRU cache  
+- preserves ComfyUI conditioning behavior  
+- mutation-safe reuse across nodes  
+
+Designed for complex workflows requiring multiple ControlNet applications reducing unnecessary overhead.
 
 ---
 
@@ -238,8 +327,7 @@ https://github.com/rgthree
 
 ## JLC LoRA Loader (Block Weight)
 
-A LoRA loader with **block weight support**, allowing detailed control
-over how LoRA influence is distributed across model layers.
+A LoRA loader with **block weight support**, allowing detailed control over how LoRA influence is distributed across model layers.
 
 ### Features
 
@@ -288,7 +376,6 @@ https://github.com/Damkohler
 
 # Future Plans
 
-- Reintroduce ControlNet node with validated behavior  
 - Expand pipeline utilities  
 - Improve instrumentation and debugging visibility  
 - Continue building workflow-focused nodes  
