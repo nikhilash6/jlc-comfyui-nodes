@@ -145,7 +145,7 @@ class JLC_ControlNetApplyAdvanced:
                 }),
 
                 "control_net_name": (
-                    folder_paths.get_filename_list("controlnet"),
+                    ["NONE / Input Override"] + folder_paths.get_filename_list("controlnet"),
                     {
                         "tooltip": (
                             "Select ControlNet model.\n"
@@ -177,15 +177,31 @@ class JLC_ControlNetApplyAdvanced:
         if (not enabled) or strength == 0:
             print(f"[JLC-ControlNet] 😴 Node idle (enabled={enabled})")
             return (positive, negative, vae, control_net)
+        
+        if control_net_name == "NONE / Input Override":
+            control_net_name = None
+        
+        if control_net is None and control_net_name is None:
+            if DEBUG:
+                print("[JLC-ControlNet] ⏭️ Skipped (no input, no model selected)")
+            return (positive, negative, vae, control_net)
 
-        print(f"[JLC-ControlNet] 🚀 Node triggered (enabled={enabled}, strength={strength})")
+        print(f"[JLC-ControlNet] 🟢 Node triggered (enabled={enabled}, strength={strength})")
 
         if extra_concat is None:
             extra_concat = []
 
+        def _get_cnet_name(path=None, name=None):
+            if path:
+                return os.path.splitext(os.path.basename(path))[0]
+            if name:
+                return os.path.splitext(os.path.basename(name))[0]
+            return "external"
+
         # 🔁 Resolve ControlNet source
         if control_net is not None:
-            print(f"[JLC-ControlNet] 🔁🔌 Using ControlNet from input connection")
+            cnet_display = _get_cnet_name(name=control_net_name)
+            print(f"[JLC-ControlNet] 🔌 Using ControlNet '{cnet_display}' from input")
 
         else:
             if control_net_name is None:
@@ -196,6 +212,8 @@ class JLC_ControlNetApplyAdvanced:
                 control_net_name
             )
 
+            cnet_display = _get_cnet_name(path=controlnet_path)
+
             # 🔒 Check strong cache
             if controlnet_path in GLOBAL_CONTROLNET_CACHE:
                 control_net = GLOBAL_CONTROLNET_CACHE[controlnet_path]
@@ -203,16 +221,16 @@ class JLC_ControlNetApplyAdvanced:
                 # 🔁 mark as recently used (LRU)
                 GLOBAL_CONTROLNET_CACHE.move_to_end(controlnet_path)
 
-                print(f"[JLC-ControlNet] 🔁📡 Wireless reuse of ControlNet '{control_net_name}' from cache")
+                print(f"[JLC-ControlNet] 🔁 ControlNet '{cnet_display}' in selector already in cache")
 
                 # 🧠 SELF-HEALING SAFEGUARD (only on reuse)
                 if getattr(control_net, "_jlc_dirty", False):
-                    print(f"[JLC-ControlNet] 🧽 Cleaning cached ControlNet before reuse")
+                    print(f"[JLC-ControlNet] 🧽 Cleaning cached ControlNet '{cnet_display}'")
                     control_net.cleanup()
                     control_net._jlc_dirty = False
 
             else:
-                print(f"[JLC-ControlNet] 💾 Loading ControlNet '{control_net_name}' from disk")
+                print(f"[JLC-ControlNet] 💾 Loading ControlNet '{cnet_display}' from disk")
 
                 control_net = comfy.controlnet.load_controlnet(controlnet_path)
 
@@ -224,12 +242,13 @@ class JLC_ControlNetApplyAdvanced:
                 # 🔥 Eviction (LRU)
                 if len(GLOBAL_CONTROLNET_CACHE) > MAX_CACHED_CONTROLNETS:
                     evicted_key, _ = GLOBAL_CONTROLNET_CACHE.popitem(last=False)
-                    print(f"[JLC-ControlNet] 🗑️ Evicted '{os.path.basename(evicted_key)}' from cache")
+                    evicted_name = _get_cnet_name(path=evicted_key)
+                    print(f"[JLC-ControlNet] 🗑️ Evicted '{evicted_name}' from cache")
 
-        # 🔍 Cache debug (always print current state)
+        # 🔍 Cache debug
         cache_keys = list(GLOBAL_CONTROLNET_CACHE.keys())
-        print(f"[JLC-ControlNet] 🧠 Cache state ({len(cache_keys)}/{MAX_CACHED_CONTROLNETS}): {cache_keys}")
-        print(f"[JLC-ControlNet] 📊 Cache RAM estimate: ~{len(cache_keys)*2} GB")
+        cache_names = [_get_cnet_name(path=k) for k in cache_keys]
+        print(f"[JLC-ControlNet] 🧠 Cache ({len(cache_names)}/{MAX_CACHED_CONTROLNETS}): {cache_names}")
         
 
         # ------------------------------------------------------------------
