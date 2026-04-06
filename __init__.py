@@ -43,6 +43,9 @@ from .nodes.jlc_controlnet_apply import JLC_ControlNetApply
 from .nodes.jlc_controlnet_apply_advanced import JLC_ControlNetApplyAdvanced
 from .nodes.jlc_lora_loader_ten_stack import JLC_LoraLoaderTenStack
 from .nodes.jlc_lora_loader_block_weight_two import JLC_LoraLoaderBlockWeightTwo
+from .nodes.jlc_seed_generator import JLC_SeedGenerator
+from .nodes.jlc_controlnet_composition import JLC_ControlNetComposition
+# from .nodes.jlc_cuda_cleanup import JLC_CudaCleanup
 
 NODE_CLASS_MAPPINGS = {
     "JLC_PaddedImage": JLC_PaddedImage,
@@ -51,6 +54,9 @@ NODE_CLASS_MAPPINGS = {
     "JLC_ControlNetApplyAdvanced": JLC_ControlNetApplyAdvanced,
     "JLC_LoraLoaderTenStack": JLC_LoraLoaderTenStack,
     "JLC_LoraLoaderBlockWeightTwo": JLC_LoraLoaderBlockWeightTwo,
+    "JLC_SeedGenerator": JLC_SeedGenerator,
+    "JLC_ControlNetComposition": JLC_ControlNetComposition,
+    # "JLC_CudaCleanup": JLC_CudaCleanup,
 }
 
 # Keep \u2003 (em-dash) leading space in names to avoid logo overlap;
@@ -61,6 +67,9 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "JLC_ControlNetApplyAdvanced": "\u2003JLC ControlNet Apply (Advanced)",
     "JLC_LoraLoaderTenStack": "\u2003JLC 10-LoRA Loader",
     "JLC_LoraLoaderBlockWeightTwo": "\u2003JLC 2-LoRA Loader - Block Weight",
+    "JLC_SeedGenerator": "\u2003JLC Seed Generator",
+    "JLC_ControlNetComposition": "\u2003JLC ControlNet Composition",
+    # "JLC_CudaCleanup": "\u2003JLC_CudaCleanup",
 }
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]

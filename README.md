@@ -1,9 +1,9 @@
 # JLC ComfyUI Nodes
 
 <p align="center">
-  <img src="assets/icons/jlc-comfyui-nodes_Logo-0512.png" width="120" style="vertical-align: middle;">
+  <img src="assets/icons/jlc-comfyui-nodes_Logo-0512.png" width="120">
   &nbsp;&nbsp;&nbsp;
-  <img src="assets/icons/jlc-comfyui-nodes_Logo-Dark-0512.png" width="120" style="vertical-align: middle;">
+  <img src="assets/icons/jlc-comfyui-nodes_Logo-Dark-0512.png" width="120">
 </p>
 
 [![ComfyUI Registry](https://img.shields.io/badge/Available%20on-ComfyUI%20Registry-blue)](https://registry.comfy.org/packages/jlc-comfyui-nodes)
@@ -13,121 +13,196 @@
 
 ---
 
-## Featured Node in this Release: JLC ControlNet Apply (Advanced)
+## Featured Node in this Release: JLC ControlNet Composition
 
-The **JLC ControlNet Apply (Advanced)** node is an extension of ComfyUI’s native ControlNet application logic.
+The **JLC ControlNet Composition** node introduces an alternative execution model for ControlNet workflows.
 
-It preserves full compatibility with ComfyUI’s conditioning pipeline while introducing:
+Instead of relying on ComfyUI’s standard **recursive ControlNet chaining**, this node performs:
 
-- integrated ControlNet loading  
-- bounded session-level caching (LRU)  
-- deterministic reuse across nodes  
-- mutation-safe execution  
-
-The node is designed to improve workflow efficiency **without altering ComfyUI’s execution semantics**.
+→ **Non-recursive, parallel aggregation of multiple ControlNets**
 
 ---
 
-### Architecture Overview
+### Key Concept
 
-#### Stateless Execution
+#### Standard ComfyUI Behavior
 
-ControlNet application follows ComfyUI’s native pattern:
+ControlNets are applied via recursive chaining:
 
-- `control_net.copy().set_cond_hint(...)`
-- `set_previous_controlnet(...)`
+```
+c_net.set_previous_controlnet(prev)
+```
 
-The original ControlNet object is never mutated during execution.
+Execution becomes a nested evaluation during sampling:
 
----
-
-#### Three-Tier Model Resolution
-
-ControlNet objects are resolved in strict priority:
-
-1. Wired input (`control_net`)
-2. Internal LRU cache
-3. Disk load (`control_net_name`)
-
-This ensures deterministic behavior while enabling reuse when possible.
+```
+ControlNet(A(ControlNet(B(ControlNet(C(...)))))
+```
 
 ---
 
-#### Bounded LRU Cache
+#### JLC ControlNet Composition
 
-- Implemented via `OrderedDict`
-- Configurable size (default: 2–3 models)
-- Session-scoped (cleared on restart)
+This node replaces recursion with **explicit parallel evaluation**:
 
-Behavior:
-- Reuse → `move_to_end()`
-- Overflow → `popitem(last=False)`
+1. Extract ControlNet chain  
+2. Detach recursive links  
+3. Evaluate each ControlNet independently  
+4. Combine outputs via weighted accumulation  
 
-Cache reduces redundant disk loads while remaining fully controlled.
+Execution becomes:
 
----
-
-#### Mutation Safety
-
-Cached ControlNet objects are automatically cleaned before reuse.
-
-This guarantees:
-- no cross-node contamination
-- no cross-run state leakage
-- safe reuse without deep copies
+```
+sum(weight_i * ControlNet_i(x))
+```
 
 ---
 
-#### Determinism
+### Core Properties
 
-- Wired reuse → fully deterministic  
-- Cached reuse → deterministic via cleanup  
-- No weak references  
-- No GC-dependent behavior  
-
-All reuse paths are explicit and controlled.
-
----
-
-#### Performance Scope
-
-Improves:
-- ControlNet load efficiency  
-- multi-node reuse within a session  
-
-Does not affect:
-- VRAM usage during sampling  
-- ControlNet compute cost  
-
-VRAM remains managed entirely by ComfyUI.
+- Fully compatible with ComfyUI (`get_control`, hooks, etc.)
+- Sampler receives a **single ControlNet object**
+- Internally evaluates multiple ControlNets
+- No recursive traversal during sampling
+- Deterministic and mutation-safe
 
 ---
 
-### Design Principle
+### Performance Characteristics
 
-> Safe reuse requires preserving a clean base object, not avoiding reuse entirely.
+Observed in controlled testing:
+
+- ~2–3× speedup with 3 ControlNets  
+- Reduced runtime variance  
+- Stable behavior across randomized runs  
+
+Test conditions:
+
+- Resolution: 1024 × 1536  
+- Models: 16-bit  
+- Hardware: RTX 4090 Laptop (16GB)  
+- Randomized ControlNet combinations and seeds  
 
 ---
 
-A collection of workflow-focused ComfyUI nodes designed to simplify advanced image generation pipelines. Includes tools for flexible image padding and mask merging to enable inpainting and outpainting in a single pass, sequential LoRA stacking (up to 10 LoRAs), a two LoRA loader with block-weight control, and reusable components for Flux-based workflows and complex image generation pipelines.
+### Visual Behavior
 
-Developed by **J. L. Córdova**.
+- Structural fidelity preserved (pose, depth, edges)  
+- Minor local variation vs recursive baseline  
+- No systematic degradation observed  
 
-These nodes are designed for:
+### Visual Comparison
 
-- Flux workflows  
-- LoRA experimentation  
-- advanced inpainting / outpainting pipelines  
-- reusable pipeline components  
+#### Example 1
 
-Repository  
-https://github.com/Damkohler/jlc-comfyui-nodes
+<table>
+  <tr>
+    <td align="center"><strong>Standard Recursive Chaining</strong></td>
+    <td align="center"><strong>Non-Recursive Composition</strong></td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="assets/workflows/example_recursive_01.png" width="420"><br>
+    </td>
+    <td align="center">
+      <img src="assets/workflows/example_composition_01.png" width="420"><br>
+    </td>
+  </tr>
+</table>
+
+#### Example 2
+
+<table>
+  <tr>
+    <td align="center"><strong>Standard Recursive Chaining</strong></td>
+    <td align="center"><strong>Non-Recursive Composition</strong></td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="assets/workflows/example_recursive_02.png" width="420"><br>
+    </td>
+    <td align="center">
+      <img src="assets/workflows/example_composition_02.png" width="420"><br>
+    </td>
+  </tr>
+</table>
+
+---
+
+## Benchmark Results
+
+Results from controlled testing comparing recursive ControlNet chaining vs non-recursive composition.
+
+### Test Setup
+
+- Model: FLUX.1-dev-ControlNet-Union-PRO  
+- Precision: 16-bit throughout (Flux variants, VAE, T5XXL + CLIP stack)  
+- Resolution: 1024 × 1536  
+- ControlNets: 3 (OpenPose + HED + Depth)  
+- Sampling: CFG 2.1, 35 steps  
+- Hardware: Laptop RTX 4090 (16GB)  
+- Methodology: Randomized runs (mixed ordering, with/without node, repeated seeds for sanity checks)
+
+### Raw Measurements
+
+| Test | Recursive (sec) | Composition (sec) |
+|------|----------------|-------------------|
+| 1    | 668            | 349               |
+| 2    | 683            | 226               |
+| 3    | 1080           | 274               |
+| 4    | 641            | 312               |
+| 5    | 516            | 295               |
+| 6    | 957            | 297               |
+| 7    | —              | 298               |
+| 8    | —              | 342               |
+
+*Tests 7–8 were not completed for the recursive baseline due to excessive runtime.*
+
+### Summary
+
+| Metric | Recursive | Composition | Improvement |
+|--------|----------|------------|-------------|
+| Average Time (sec) | 757.5 | 299.1 | **2.53× faster** |
+| Std Dev (sec)      | 214.1 | 38.7  | **5.5× more stable** |
+
+Composition shows both a significant reduction in mean runtime and a substantial decrease in variance.
+
+---
+
+### Important Distinction
+
+This node is **not**:
+
+- a stacking utility  
+- a UI convenience wrapper  
+- a new ControlNet model  
+
+This is a **change in execution paradigm**:
+
+> Recursive composition → Explicit parallel aggregation
 
 ---
 
 ## Example Workflows
 
 PNG workflows contain the embedded ComfyUI graph and can be dragged directly into the ComfyUI canvas.
+
+---
+
+### ControlNet Composition (Multi-ControlNet Example)
+
+*(Example using JLC ControlNet Composition with multiple ControlNets)*
+
+<p align="center">
+  <img src="assets/workflows/jlc_controlnet_composition_01.png" width="900">
+</p>
+
+<p align="center">
+  <a href="assets/workflows/jlc_controlnet_composition_01.png">Download PNG</a> •
+  <a href="assets/workflows/jlc_controlnet_composition.json">Download JSON</a>
+</p>
+
+---
 
 ### ControlNet Workflow
 
@@ -139,7 +214,6 @@ PNG workflows contain the embedded ComfyUI graph and can be dragged directly int
   <a href="assets/workflows/jlc_ControlNet_Apply_Advanced.png">Download PNG</a> •
   <a href="assets/workflows/jlc_ControlNet_Apply_Advanced.json">Download JSON</a>
 </p>
-
 
 ---
 
@@ -167,53 +241,18 @@ PNG workflows contain the embedded ComfyUI graph and can be dragged directly int
   <a href="assets/workflows/jlc_padded_image_Best_Infill_Outfill.json">Download JSON</a>
 </p>
 
-*(Other workflows will be added later)*
-
 ---
 
 ## Table of Contents
 
-- [Installation](#installation)
-- [Nodes Included](#nodes-included)
-- [Node Descriptions](#node-descriptions)
-- [Design Philosophy](#design-philosophy)
-- [Compatibility](#compatibility)
-- [License](#license)
-- [Attribution](#attribution)
-- [Author](#author)
-- [Future Plans](#future-plans)
-- [Contributions](#contributions)
-
----
-
-## Installation
-
-### Using git:
-
-Clone this repository into your **ComfyUI `custom_nodes` directory**.
-
-```
-ComfyUI/
-└── custom_nodes/
-```
-
-Then run:
-
-```
-git clone https://github.com/Damkohler/jlc-comfyui-nodes.git
-```
-
-
-Restart **ComfyUI** after installation.
-
----
-
-### Install via ComfyUI Manager
-
-1. Open **ComfyUI**
-2. Open **Manager**
-3. Search for **JLC ComfyUI Nodes**
-4. Click **Install**
+- Installation
+- Nodes Included
+- Node Descriptions
+- Design Philosophy
+- Compatibility
+- License
+- Author
+- Contributions
 
 ---
 
@@ -221,6 +260,7 @@ Restart **ComfyUI** after installation.
 
 | Node | Purpose |
 |-----|--------|
+| **JLC ControlNet Composition** | Non-recursive parallel aggregation of multiple ControlNets |
 | **JLC Padded Image** | Canvas preparation for inpainting and outpainting workflows |
 | **JLC Padded Latent** | Combined padded-image + latent + mask conditioning pipeline |
 | **JLC ControlNet Apply** | Legacy ControlNet node (simplified application) |
@@ -232,113 +272,66 @@ Restart **ComfyUI** after installation.
 
 # Node Descriptions
 
-## JLC Padded Image
+## JLC ControlNet Composition
 
-A utility node that prepares images for **inpainting or outpainting** by placing them on a new canvas with a specified aspect ratio and size.
+A ControlNet node that replaces recursive chaining with **explicit parallel composition**.
 
-### Features
+### What It Does
 
-- Canvas resizing with aspect ratio control  
-- Image placement using offset controls  
-- High-quality **Lanczos resampling**  
-- Automatic outpaint mask generation  
-- Optional manual mask merging  
-- Deterministic padding behavior  
+- Accepts one or more ControlNet inputs  
+- Internally detaches recursive links  
+- Evaluates each ControlNet independently  
+- Combines results using weighted accumulation  
 
-Designed to work particularly well with inpainting models such as `flux1-fill-dev`.
+### Why It Matters
+
+Standard ControlNet chaining:
+
+- introduces recursive execution  
+- increases sampling overhead  
+- creates performance variability  
+
+This node:
+
+- removes recursion entirely  
+- stabilizes execution  
+- improves performance in multi-ControlNet workflows  
+
+### Execution Model
+
+Instead of:
+
+```
+A(B(C(x)))
+```
+
+This node computes:
+
+```
+A(x) + B(x) + C(x)
+```
+
+(with optional weighting)
 
 ---
+
+## JLC Padded Image
+(unchanged)
 
 ## JLC Padded Latent
-
-A higher-level workflow node that combines:
-
-- padded image preparation  
-- outpaint mask generation and merge with inpaint masks  
-- inpaint conditioning  
-
-### Outputs
-
-- conditioned positive prompt  
-- conditioned negative prompt  
-- latent image  
-- mask  
-- image dimensions  
-
-This node simplifies building **reusable inpainting pipelines**.
-
----
+(unchanged)
 
 ## JLC ControlNet Apply
-
-A streamlined node for applying **ControlNet conditioning** within a generation pipeline.
-
-### Design Goals
-
-- simplified parameter handling  
-- improved workflow clarity  
-- compatibility with Flux-based pipelines  
-
-This node adapts the built-in **ComfyUI ControlNet application logic** for cleaner integration into custom workflows.
-
----
+(unchanged)
 
 ## JLC ControlNet Apply (Advanced)
-
-An advanced ControlNet application node that combines:
-
-- model loading  
-- deterministic chaining  
-- session-level caching  
-
-### Key Features
-
-- supports both wired and internal ControlNet sources  
-- avoids redundant model loads via LRU cache  
-- preserves ComfyUI conditioning behavior  
-- mutation-safe reuse across nodes  
-
-Designed for complex workflows requiring multiple ControlNet applications reducing unnecessary overhead.
-
----
+(unchanged)
 
 ## JLC 10 LoRA Loader Stack
-
-Applies up to **ten LoRA models sequentially** to a base model.
-
-### Features
-
-Each slot includes:
-
-- selectable LoRA file  
-- independent strength control  
-
-Slots operate independently and are applied **in order**.
-
-Empty slots or strengths of zero are automatically skipped.
-
-### Inspiration
-
-Concept inspired by:
-
-https://github.com/rgthree
-
----
+(unchanged)
 
 ## JLC LoRA Loader (Block Weight)
-
-A LoRA loader with **block weight support**, allowing detailed control over how LoRA influence is distributed across model layers.
-
-### Features
-
-- multiple LoRA slots  
-- independent model and CLIP strengths  
-- per-slot block weight vectors  
-- sequential LoRA application  
-
-Adapted from:
-
-https://github.com/ltdrdata/ComfyUI-Inspire-Pack
+(unchanged)
 
 ---
 
@@ -374,17 +367,7 @@ https://github.com/Damkohler
 
 ---
 
-# Future Plans
-
-- Expand pipeline utilities  
-- Improve instrumentation and debugging visibility  
-- Continue building workflow-focused nodes  
-
----
-
 # Contributions
 
 Suggestions and improvements are welcome.  
 Feel free to open issues or submit pull requests.
-
----

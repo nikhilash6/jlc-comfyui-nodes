@@ -84,9 +84,10 @@ cache/
 downloads/
 
 # --------------------------------------------------
-# local backups
+# local backups and other stuff
 # --------------------------------------------------
 quarantine/
+extras/
 
 # --------------------------------------------------
 # Temporary files
