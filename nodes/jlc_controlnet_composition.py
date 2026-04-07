@@ -300,7 +300,7 @@ class JLC_ControlNetComposition:
                     "tooltip": "Contribution of ControlNet 5 (can be negative)"
                 }),
                 "alpha": ("FLOAT", {
-                    "default": 0.7,
+                    "default": 1.0,
                     "min": 0.0,
                     "max": 2.0,
                     "step": 0.01,
