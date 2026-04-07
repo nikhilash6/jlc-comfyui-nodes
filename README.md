@@ -199,7 +199,7 @@ PNG workflows contain the embedded ComfyUI graph and can be dragged directly int
 
 <p align="center">
   <a href="assets/workflows/jlc_ControlNet_Composition.png">Download PNG</a> •
-  <a href="assets/workflows/jlc_Controlnet_Composition.json">Download JSON</a>
+  <a href="assets/workflows/jlc_ControlNet_Composition.json">Download JSON</a>
 </p>
 
 ---
