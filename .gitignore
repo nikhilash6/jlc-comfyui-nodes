@@ -84,10 +84,11 @@ cache/
 downloads/
 
 # --------------------------------------------------
-# local backups and other stuff
+# local/dev-only folders
 # --------------------------------------------------
-quarantine/
-extras/
+.quarantine/
+.extras/
+.deprecated/
 
 # --------------------------------------------------
 # Temporary files

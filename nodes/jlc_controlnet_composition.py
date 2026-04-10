@@ -57,59 +57,29 @@ JLC ControlNet Composition
 
 MANIFEST = {
     "name": "JLC ControlNet Composition",
-    "version": (1, 0, 0),
+    "version": (1, 1, 0),
     "author": "J. L. Córdova",
     "description": (
-            "Node that implements a novel non-recursive parallel ControlNet composition "
-            "approach that replaces recursive chaining with explicit weighted fusion for "
-            "improved performance, stability, and control."
+            "Node that implements a novel non-recursive ControlNet composition "
+            "approach, replacing recursive chaining with explicit weighted fusion. "
+            "Uses a deterministic streaming accumulation strategy with explicit GPU "
+            "synchronization to control execution order, reduce peak memory pressure, "
+            "and improve stability across multi-ControlNet workflows."
     ),
 }
 
 import copy
+import torch
 
 # ------------------------------------------------------------
 # 🔧 Wrapper: behaves like ONE ControlNet to the sampler
 # ------------------------------------------------------------
 class JLC_ComposedControlNet:
-    def __init__(self, controlnets, weights, fusion_mode="mutation"):
+    def __init__(self, controlnets, weights):
         self.controlnets = controlnets
         self.weights = weights
-        self.fusion_mode = fusion_mode
         self.previous_controlnet = None
         self.extra_hooks = None
-
-    def _scale_tensor(self, tensor, weight, mutate=False):
-        if tensor is None:
-            return None
-
-        if mutate:
-            t = tensor.clone()
-            if weight != 1.0:
-                t.mul_(weight)
-            return t
-
-        return tensor if weight == 1.0 else tensor * weight
-
-    def _accumulate_tensor(self, dst, src, weight, mutate=False):
-        if src is None:
-            return dst
-
-        if dst is None:
-            return self._scale_tensor(src, weight, mutate=mutate)
-
-        if mutate:
-            # safety: avoid accidental aliasing
-            if dst is src:
-                dst = dst.clone()
-
-            if weight == 1.0:
-                dst.add_(src)
-            else:
-                dst.add_(src, alpha=weight)
-            return dst
-
-        return dst + src if weight == 1.0 else dst + (src * weight)
 
     # ------------------------------------------------------------------------
     # This is the fundamental concept of this approach. Implements the ComfyUI ControlNet
@@ -119,54 +89,102 @@ class JLC_ComposedControlNet:
     # ------------------------------------------------------------------------
     def get_control(self, x_noisy, t, cond, batched_number, transformer_options):
         combined = None
-        mutate = (self.fusion_mode == "mutation")
 
         for cnet, w in zip(self.controlnets, self.weights):
+            # ------------------------------------------------------------
+            # 🔵 Phase 1 — Select active ControlNet
+            # ------------------------------------------------------------
             if cnet is None or w == 0:
                 continue
 
+            # ------------------------------------------------------------
+            # 🔵 Phase 2 — Execute ControlNet (produce tensors)
+            # ------------------------------------------------------------
             out = cnet.get_control(x_noisy, t, cond, batched_number, transformer_options)
+
             if out is None:
                 continue
 
+            # ------------------------------------------------------------
+            # 🟡 Phase 3 — Synchronization barrier (CRITICAL)
+            # Ensures:
+            #   • all GPU kernels for this ControlNet are finished
+            #   • memory is actually materialized and stable
+            #   • prevents overlap with next ControlNet execution
+            # ------------------------------------------------------------
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+
+            # ------------------------------------------------------------
+            # 🟢 Phase 4 — Ownership (FIRST CLONE ONLY)
+            # Establish combined structure and take ownership of tensors
+            # ------------------------------------------------------------
             if combined is None:
                 combined = {}
-                for key in ["input", "middle", "output"]:
-                    out_list = out.get(key, [])
-                    combined[key] = [
-                        self._scale_tensor(v, w, mutate=mutate)
-                        for v in out_list
-                    ]
+
+                for key, out_list in out.items():
+                    new_list = [None] * len(out_list)
+
+                    for i, v in enumerate(out_list):
+                        if v is None:
+                            continue
+
+                        owned = v.clone()
+
+                        if w != 1.0:
+                            owned.mul_(w)
+
+                        new_list[i] = owned
+
+                    combined[key] = new_list
+
+            # ------------------------------------------------------------
+            # 🟣 Phase 5 — Streaming accumulation (in-place, no temps)
+            # ------------------------------------------------------------
             else:
-                for key in ["input", "middle", "output"]:
-                    out_list = out.get(key, [])
+                for key, out_list in out.items():
 
                     if key not in combined:
                         combined[key] = [None] * len(out_list)
 
                     combined_list = combined[key]
 
-                    # safety in case lengths differ
                     if len(combined_list) < len(out_list):
                         combined_list.extend([None] * (len(out_list) - len(combined_list)))
 
-                    for i, val in enumerate(out_list):
-                        combined_list[i] = self._accumulate_tensor(
-                            combined_list[i],
-                            val,
-                            w,
-                            mutate=mutate,
-                        )
+                    for i, v in enumerate(out_list):
+                        if v is None:
+                            continue
 
-                    # break local refs as early as possible
+                        dst = combined_list[i]
+
+                        if dst is None:
+                            owned = v.clone()
+
+                            if w != 1.0:
+                                owned.mul_(w)
+
+                            combined_list[i] = owned
+                        else:
+                            dst.add_(v, alpha=w)
+
+                    # local reference drop (helps Python GC timing)
                     del out_list
-                    del combined_list
 
-            # sequential-release intent:
-            # do not keep prior ControlNet outputs alive longer than needed
+            # ------------------------------------------------------------
+            # 🔴 Phase 6 — Immediate release of ControlNet output
+            # ------------------------------------------------------------
             del out
 
+            # (optional experimental hook — see notes below)
+            # if torch.cuda.is_available():
+            #     torch.cuda.empty_cache()
+
+        # ------------------------------------------------------------
+        # ⚫ Phase 7 — Final result
+        # ------------------------------------------------------------
         return combined
+
 
     # --------------------------------------------------
     # REQUIRED for compatibility: hook aggregation
@@ -190,13 +208,21 @@ class JLC_ComposedControlNet:
 
     # --------------------------------------------------
     # REQUIRED for compatibility: estimates of memory requirements
+    # considering only largest child ControlNet
     # --------------------------------------------------
     def inference_memory_requirements(self, dtype):
-        total = 0
+        max_req = 0
+
         for cnet in self.controlnets:
+            if cnet is None:
+                continue
+
             if hasattr(cnet, "inference_memory_requirements"):
-                total += cnet.inference_memory_requirements(dtype)
-        return total
+                req = cnet.inference_memory_requirements(dtype)
+                if req is not None:
+                    max_req = max(max_req, req)
+
+        return max_req
 
     # --------------------------------------------------
     # REQUIRED for compatibility: pre-run (sets timestep ranges, etc.)
@@ -215,7 +241,7 @@ class JLC_ComposedControlNet:
                 cnet.cleanup()
 
         # aggressive reference break
-        self.controlnets = []
+        # self.controlnets = []
 
 
 # ------------------------------------------------------------
@@ -301,7 +327,7 @@ class JLC_ControlNetComposition:
                 }),
                 "alpha": ("FLOAT", {
                     "default": 1.0,
-                    "min": 0.0,
+                    "min": 0.01,
                     "max": 2.0,
                     "step": 0.01,
                     "tooltip": "Order bias. <1 favors earlier ControlNets, >1 favors later ones"
@@ -320,7 +346,7 @@ class JLC_ControlNetComposition:
         weight_3=1.0,
         weight_4=1.0,
         weight_5=1.0,
-        alpha=0.7,
+        alpha=1.0,
     ):
         weights = [weight_1, weight_2, weight_3, weight_4, weight_5]
 
@@ -356,15 +382,12 @@ class JLC_ControlNetComposition:
                     for i, w in enumerate(trimmed_weights)
                 ]
 
-                fusion_mode = "mutation"
-
-                print(f"[JLC-Compose] alpha={alpha} weights={final_weights}")
+                print(f"[JLC-ControlNet] ⚙️ ControlNet composition using weights={final_weights} alpha={alpha}")
 
                 # 🧩 Create composed wrapper
                 composed = JLC_ComposedControlNet(
                     trimmed_chain,
                     final_weights,
-                    fusion_mode=fusion_mode,
                 )
 
                 # 🔁 Inject back
