@@ -89,6 +89,7 @@ downloads/
 .quarantine/
 .extras/
 .deprecated/
+.backups/
 
 # --------------------------------------------------
 # Temporary files

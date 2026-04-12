@@ -35,6 +35,7 @@ JLC ComfyUI Custom Nodes
 # __init__.py  (JLC-Tests-comfyui)
 
 import os
+import sys
 from server import PromptServer  # used for static route mounting
 
 from .nodes.jlc_padded_image import JLC_PaddedImage
@@ -45,7 +46,16 @@ from .nodes.jlc_lora_loader_ten_stack import JLC_LoraLoaderTenStack
 from .nodes.jlc_lora_loader_block_weight_two import JLC_LoraLoaderBlockWeightTwo
 from .nodes.jlc_seed_generator import JLC_SeedGenerator
 from .nodes.jlc_controlnet_composition import JLC_ControlNetComposition
+# from .nodes.jlc_controlnet_orchestrator import JLC_ControlNetOrchestrator
 # from .nodes.jlc_cuda_cleanup import JLC_CudaCleanup
+
+
+print("🧠 JLC Nodes Loaded:")
+# print("🔥 INIT LOADED:", __file__)
+
+# for name, mod in sys.modules.items():
+#     if "jlc" in name.lower():
+#         print("🧠 JLC MODULE:", name, getattr(mod, "__file__", None))
 
 NODE_CLASS_MAPPINGS = {
     "JLC_PaddedImage": JLC_PaddedImage,
@@ -56,6 +66,7 @@ NODE_CLASS_MAPPINGS = {
     "JLC_LoraLoaderBlockWeightTwo": JLC_LoraLoaderBlockWeightTwo,
     "JLC_SeedGenerator": JLC_SeedGenerator,
     "JLC_ControlNetComposition": JLC_ControlNetComposition,
+    # "JLC_ControlNetOrchestrator": JLC_ControlNetOrchestrator,
     # "JLC_CudaCleanup": JLC_CudaCleanup,
 }
 
@@ -69,6 +80,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "JLC_LoraLoaderBlockWeightTwo": "\u2003JLC 2-LoRA Loader - Block Weight",
     "JLC_SeedGenerator": "\u2003JLC Seed Generator",
     "JLC_ControlNetComposition": "\u2003JLC ControlNet Composition",
+    # "JLC_ControlNetOrchestrator": "\u2003JLC ControlNet Orchestrator",
     # "JLC_CudaCleanup": "\u2003JLC_CudaCleanup",
 }
 
