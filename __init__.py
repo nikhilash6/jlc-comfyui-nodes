@@ -46,7 +46,9 @@ from .nodes.jlc_lora_loader_ten_stack import JLC_LoraLoaderTenStack
 from .nodes.jlc_lora_loader_block_weight_two import JLC_LoraLoaderBlockWeightTwo
 from .nodes.jlc_seed_generator import JLC_SeedGenerator
 from .nodes.jlc_controlnet_composition import JLC_ControlNetComposition
-# from .nodes.jlc_controlnet_orchestrator import JLC_ControlNetOrchestrator
+from .nodes.jlc_controlnet_orchestrator import JLC_ControlNetOrchestrator
+from .nodes.jlc_controlnet_orchestrator_adv import JLC_ControlNetOrchestratorAdvanced
+# from .nodes.jlc_controlnet_orchestrator_hyper import JLC_ControlNetOrchestratorHyper
 # from .nodes.jlc_cuda_cleanup import JLC_CudaCleanup
 
 
@@ -66,7 +68,9 @@ NODE_CLASS_MAPPINGS = {
     "JLC_LoraLoaderBlockWeightTwo": JLC_LoraLoaderBlockWeightTwo,
     "JLC_SeedGenerator": JLC_SeedGenerator,
     "JLC_ControlNetComposition": JLC_ControlNetComposition,
-    # "JLC_ControlNetOrchestrator": JLC_ControlNetOrchestrator,
+    "JLC_ControlNetOrchestrator": JLC_ControlNetOrchestrator,
+    "JLC_ControlNetOrchestratorAdvanced": JLC_ControlNetOrchestratorAdvanced,
+    # "JLC_ControlNetOrchestratorHyper": JLC_ControlNetOrchestratorHyper,
     # "JLC_CudaCleanup": JLC_CudaCleanup,
 }
 
@@ -80,7 +84,9 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "JLC_LoraLoaderBlockWeightTwo": "\u2003JLC 2-LoRA Loader - Block Weight",
     "JLC_SeedGenerator": "\u2003JLC Seed Generator",
     "JLC_ControlNetComposition": "\u2003JLC ControlNet Composition",
-    # "JLC_ControlNetOrchestrator": "\u2003JLC ControlNet Orchestrator",
+    "JLC_ControlNetOrchestrator": "\u2003JLC ControlNet Orchestrator",
+    "JLC_ControlNetOrchestratorAdvanced": "\u2003JLC ControlNet Orchestrator (Advanced)",
+    # "JLC_ControlNetOrchestratorHyper": "\u2003JLC ControlNet Orchestrator (Hyper - Flux)",
     # "JLC_CudaCleanup": "\u2003JLC_CudaCleanup",
 }
 
