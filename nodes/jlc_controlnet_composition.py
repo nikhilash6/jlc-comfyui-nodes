@@ -43,6 +43,16 @@ JLC ControlNet Composition
             • high-resolution or tiled pipelines
             • LoRA + ControlNet combined setups
 
+- Release Notes (v1.2.0)
+    - Fixes ControlNet slot-order dependence when α = 1
+    - Corrects single-ControlNet behavior via native passthrough
+    - Introduces early filtering of inactive ControlNets
+
+- Performance Notes
+    - Reduces recursive ControlNet traversal overhead
+    - Typically improves runtime and stability in multi-ControlNet workflows
+    - Performance gains scale with number of ControlNets (N ≥ 2)
+
 - Attribution & License
   - Concept and implementation by **J. L. Córdova**
     with development assistance from **ChatGPT (OpenAI)**.
@@ -57,14 +67,16 @@ JLC ControlNet Composition
 
 MANIFEST = {
     "name": "JLC ControlNet Composition",
-    "version": (1, 1, 0),
+    "version": (1, 2, 0),
     "author": "J. L. Córdova",
     "description": (
-            "Node that implements a novel non-recursive ControlNet composition "
-            "approach, replacing recursive chaining with explicit weighted fusion. "
-            "Uses a deterministic streaming accumulation strategy with explicit GPU "
-            "synchronization to control execution order, reduce peak memory pressure, "
-            "and improve stability across multi-ControlNet workflows."
+        "Non-recursive ControlNet composition using explicit weighted fusion. "
+        "Provides deterministic, order-invariant behavior when alpha=1, with "
+        "correct native passthrough for single-ControlNet cases. "
+        "Implements early filtering of inactive ControlNets and streaming "
+        "accumulation for stable multi-ControlNet workflows. "
+        "Reduces recursive execution overhead, typically improving runtime and "
+        "variance in multi-ControlNet pipelines."
     ),
 }
 
@@ -374,24 +386,43 @@ class JLC_ControlNetComposition:
                     out.append([t[0], d])
                     continue
 
-                trimmed_weights = weights[:len(trimmed_chain)]
+                # 🧹 Early filtering (matches JLC ControlNet Orchestrator discipline)
+                prepared = []
+                prepared_weights = []
 
-                # 🎯 Single composition law (decay-based weighting)
+                for c, w in zip(trimmed_chain, weights[:len(trimmed_chain)]):
+                    if c is None:
+                        continue
+                    if w == 0:
+                        continue
+                    prepared.append(c)
+                    prepared_weights.append(w)
+
+                # 🔸 Pure passthrough (Edge and aberrant cases, like all weights = 0)
+                if not prepared:
+                    out.append([t[0], d])
+                    continue
+
+                # 🟢 Single-ControlNet fallback
+                if len(prepared) == 1:
+                    d["control"] = prepared[0]
+                    out.append([t[0], d])
+                    continue
+
+                # 🎯 Apply alpha AFTER filtering
                 final_weights = [
                     w * (alpha ** i)
-                    for i, w in enumerate(trimmed_weights)
+                    for i, w in enumerate(prepared_weights)
                 ]
 
-                print(f"[JLC-ControlNet] ⚙️ ControlNet composition using weights={final_weights} alpha={alpha}")
+                print(f"[JLC-ControlNet] ⚙️ weights={final_weights} alpha={alpha}")
 
-                # 🧩 Create composed wrapper
-                composed = JLC_ComposedControlNet(
-                    trimmed_chain,
+                # 🧩 Compose only when N ≥ 2
+                d["control"] = JLC_ComposedControlNet(
+                    prepared,
                     final_weights,
                 )
 
-                # 🔁 Inject back
-                d["control"] = composed
                 out.append([t[0], d])
 
             return out
