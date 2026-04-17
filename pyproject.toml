@@ -1,7 +1,7 @@
 [project]
 name = "jlc-comfyui-nodes"
-version = "1.2.0"
-"description" = "A collection of workflow-focused ComfyUI nodes designed to simplify, standardize, and optimize image generation pipelines. Includes tools for image padding with unified mask generation for single-pass inpainting and outpainting, a structured ControlNet application system with deterministic chaining and optional session-level caching, and a non-recursive ControlNet composition model that replaces recursive chaining with explicit parallel aggregation for improved performance, stability, and control. Also provides flexible LoRA utilities, including a sequential loader stack (up to 10 LoRAs) and a block-weight-enabled loader for fine-grained layer control. Built for Flux-based workflows, reusable pipeline construction, and efficient experimentation with modern diffusion models."
+version = "1.3.0"
+"description" = "A collection of workflow-focused ComfyUI nodes for structured, deterministic image generation pipelines. Introduces the JLC ControlNet Orchestrator (Base & Advanced), a non-canonical execution model that replaces recursive ControlNet chaining with slot-based independent evaluation and deterministic weighted fusion, ensuring order-invariant behavior (alpha=1), copy-based isolation, early bypass of inactive slots, and native fallback for single-ControlNet cases. The Advanced variant integrates built-in ControlNet loading and persistent caching, eliminating external loader and Apply nodes while preserving correctness. Also includes JLC ControlNet Composition for parallel aggregation, JLC Padded Image and JLC Padded Latent for unified canvas and mask generation in inpainting/outpainting workflows, and additional utilities for scalable pipeline design."
 authors = [
     { name = "J. L. Córdova", email = "jose.l.cordova@gmail.com" }
 ]
@@ -13,30 +13,34 @@ keywords = [
     "comfyui",
     "comfyui-nodes",
     "comfyui-workflows",
-    "stable-diffusion",
+    "workflow",
+    "workflow-optimization",
     "diffusion",
+    "image-generation",
+    "stable-diffusion",
     "flux",
     "flux-workflows",
-    "lora",
-    "lora-loaders",
-    "lora-stack",
     "controlnet",
     "controlnet-apply",
-    "controlnet-composition",
-    "controlnet-workflows",
     "controlnet-caching",
+    "controlnet-composition",
+    "controlnet-orchestration",
+    "controlnet-workflows",
     "parallel-controlnet",
+    "streaming-controlnet",
     "deterministic-execution",
     "low-variance",
-    "streaming-controlnet",
     "memory-optimized",
+    "non-recursive",
+    "composition",
     "inpainting",
     "inpainting-pipeline",
     "masking",
-    "image-padding",
     "outpainting",
-    "image-generation",
-    "workflow",
+    "image-padding",
+    "lora",
+    "lora-loaders",
+    "lora-stack",
 ]
 
 classifiers = [

@@ -33,22 +33,28 @@ JLC ControlNet Orchestrator
             • C_i(x) = independent ControlNet outputs
             • w_i = user-defined weights (supports negative values)
 
-    - This approach:
-            • Eliminates recursive chaining and state inheritance
-            • Guarantees zero cross-contamination between ControlNets
-            • Provides deterministic, interpretable multi-CNet behavior
-            • Preserves compatibility with ComfyUI conditioning pipelines
+    - Execution model:
+            • No recursive chaining (`previous_controlnet`)
+            • No shared conditioning state between ControlNets
+            • Deterministic linear fusion (order-invariant when α = 1)
+
+    - Critical correctness guarantees:
+            • Slot-order invariance (for α = 1)
+            • Zero cross-contamination via `.copy()`
+            • Early bypass prevents inactive slots from affecting execution
+            • Single-ControlNet fallback to native Apply semantics
 
     - Philosophical deviation:
         - ControlNets are treated as **independent operators**, not
           linked transformations. Interaction occurs only at the level
-          of output aggregation, not during execution.
+          of output aggregation.
 
-    - ⚠️ Experimental Code:
-        - This node represents an ongoing exploration of alternative
-          ControlNet execution strategies.
-        - Behavior, performance characteristics, and API may evolve.
-        - Intended for advanced users and controlled testing scenarios.
+- ⚠️ Experimental Code
+    - This node represents a non-canonical formulation of ControlNet
+      interaction that diverges from ComfyUI’s native chained execution model.
+    - Behavior is stable and deterministic, but not guaranteed to reproduce
+      all edge-case behaviors of the canonical implementation.
+    - Intended for advanced workflows and controlled experimentation.
 
 - Attribution & License
   - Concept and implementation by **J. L. Córdova**
@@ -67,11 +73,14 @@ MANIFEST = {
     "version": (1, 0, 0),
     "author": "J. L. Córdova",
     "description": (
-        "Node that implements a novel non-recursive, orchestrated ControlNet composition approach, "
-        "closely approximating native ControlNet interaction dynamics without recursive chaining. "
-        "Avoids explicit chain construction while preserving interaction behavior, enabling more "
-        "predictable performance, reduced peak memory pressure, and improved stability across "
-        "multi-ControlNet workflows."
+        "Experimental non-canonical ControlNet execution node that replaces recursive chaining "
+        "with slot-based independent evaluation and deterministic weighted fusion. Eliminates "
+        "the need for chained ControlNet Apply nodes while preserving correct conditioning "
+        "injection. Ensures slot-order invariance (alpha=1), prevents cross-ControlNet state "
+        "contamination via copy-based isolation, and includes a native fallback path for "
+        "single-ControlNet execution to preserve ComfyUI scheduling semantics. Designed for "
+        "stable, interpretable multi-ControlNet workflows with reduced variance and controlled "
+        "memory behavior."
     ),
 }
 

@@ -15,40 +15,71 @@ JLC ControlNet Orchestrator (Advanced)
         • advanced inpainting / outpainting pipelines
 
 - Node Purpose
-    - The **JLC ControlNet Orchestrator** introduces an experimental,
-      fully non-recursive ControlNet execution model that departs from
-      ComfyUI’s native chained (`previous_controlnet`) architecture.
+    - The **JLC ControlNet Orchestrator (Advanced)** extends the base
+      Orchestrator with built-in ControlNet loading and caching,
+      eliminating the need for external loader nodes.
 
-    - Instead of sequential dependency and inherited state, this node:
-            • Accepts multiple ControlNet inputs (slot-based)
-            • Creates isolated instances via `.copy()` (no mutation)
-            • Applies independent conditioning per slot
-            • Executes each ControlNet against the same latent input
-            • Combines outputs via weighted additive fusion
+    - It preserves the same non-recursive execution model:
+            • Independent ControlNet instances per slot
+            • `.copy()`-based isolation (no shared state)
+            • Execution on the same latent input
+            • Streaming weighted fusion of outputs
 
     - Composition is defined as:
             combined = Σ (w_i · C_i(x))
 
-      where:
-            • C_i(x) = independent ControlNet outputs
-            • w_i = user-defined weights (supports negative values)
+- Built-in Loader System
+    - ControlNets are selected via dropdowns and loaded internally
+    - A small persistent cache avoids redundant model loads:
+            GLOBAL_CONTROLNET_CACHE[path] → ControlNet
 
-    - This approach:
-            • Eliminates recursive chaining and state inheritance
-            • Guarantees zero cross-contamination between ControlNets
-            • Provides deterministic, interpretable multi-CNet behavior
-            • Preserves compatibility with ComfyUI conditioning pipelines
+    - This cache:
+            • Stores base ControlNet models only
+            • Does NOT share execution state across slots
+            • Preserves isolation via per-slot `.copy()`
 
-    - Philosophical deviation:
-        - ControlNets are treated as **independent operators**, not
-          linked transformations. Interaction occurs only at the level
-          of output aggregation, not during execution.
+- Execution Model
+    - Same guarantees as base node:
+            • Non-recursive (no `previous_controlnet`)
+            • Independent per-slot conditioning
+            • Deterministic fusion (order-invariant when α = 1)
 
-    - ⚠️ Experimental Code:
-        - This node represents an ongoing exploration of alternative
-          ControlNet execution strategies.
-        - Behavior, performance characteristics, and API may evolve.
-        - Intended for advanced users and controlled testing scenarios.
+    - Slot resolution semantics:
+            • "DISABLED" → slot ignored
+            • "SHARE_PREVIOUS" → inherits last valid ControlNet
+            • Promotion occurs ONLY after early bypass validation
+
+    - Early bypass conditions:
+            • Missing image
+            • Zero strength
+            • Zero weight
+            • Invalid (start, end) interval
+
+    → Ensures:
+            ✔ No inactive slot can influence downstream execution
+            ✔ No order-dependent contamination via slot reuse
+
+- Critical correctness guarantees:
+            • Slot-order invariance (for α = 1)
+            • Zero cross-contamination via `.copy()`
+            • Cache-safe execution (no shared conditioning state)
+            • Single-ControlNet fallback to native Apply semantics
+
+- Philosophical Position
+    - Advanced is a strict superset of the base node:
+            • Adds ergonomic loader + cache
+            • Preserves identical execution semantics
+
+    - ControlNets remain:
+            → independent operators
+            → combined only at output level
+
+- ⚠️ Experimental Code
+    - This node represents a non-canonical formulation of ControlNet
+      interaction that diverges from ComfyUI’s native chained execution model.
+    - Behavior is stable and deterministic, but not guaranteed to reproduce
+      all edge-case behaviors of the canonical implementation.
+    - Intended for advanced workflows and controlled experimentation.
 
 - Attribution & License
   - Concept and implementation by **J. L. Córdova**
@@ -63,15 +94,18 @@ JLC ControlNet Orchestrator (Advanced)
 """
 
 MANIFEST = {
-    "name": "JLC ControlNet Orchestrator",
+    "name": "JLC ControlNet Orchestrator (Advanced)",
     "version": (1, 0, 0),
     "author": "J. L. Córdova",
     "description": (
-        "Node that implements a novel non-recursive, orchestrated ControlNet composition approach, "
-        "closely approximating native ControlNet interaction dynamics without recursive chaining. "
-        "Avoids explicit chain construction while preserving interaction behavior, enabling more "
-        "predictable performance, reduced peak memory pressure, and improved stability across "
-        "multi-ControlNet workflows."
+        "Extended version of the JLC ControlNet Orchestrator with integrated ControlNet loading "
+        "and persistent caching. Implements the same non-canonical, non-recursive execution model "
+        "using slot-based independent ControlNet evaluation and deterministic weighted fusion. "
+        "Eliminates the need for chained ControlNet Apply nodes and external loader nodes while "
+        "preserving correct conditioning injection. Maintains slot-order invariance (alpha=1), "
+        "prevents cross-contamination via copy-based isolation, and safely falls back to native "
+        "ControlNet Apply semantics for single-ControlNet cases. Built-in loaders and cache reduce "
+        "redundant model loading while maintaining strict execution correctness."
     ),
 }
 
@@ -328,7 +362,7 @@ class JLC_ControlNetOrchestratorAdvanced:
             # ----------------------------------------
             # HARD BYPASS
             # ----------------------------------------
-            if name == "DISABLED":
+            if not name or name == "DISABLED":
                 continue
 
             # ----------------------------------------
@@ -337,20 +371,16 @@ class JLC_ControlNetOrchestratorAdvanced:
             if name == "SHARE_PREVIOUS":
                 if current_base is None:
                     continue
-                base = current_base
+                candidate_base = current_base
 
             # ----------------------------------------
             # LOAD / CACHE
             # ----------------------------------------
             else:
                 path = folder_paths.get_full_path_or_raise("controlnet", name)
-
                 if path not in GLOBAL_CONTROLNET_CACHE:
                     GLOBAL_CONTROLNET_CACHE[path] = comfy.controlnet.load_controlnet(path)
-
-                base = GLOBAL_CONTROLNET_CACHE[path]
-
-            current_base = base
+                candidate_base = GLOBAL_CONTROLNET_CACHE[path]
 
             # ------------------------------------------------------------
             # 🚫 EARLY BYPASS (CRITICAL)
@@ -362,10 +392,12 @@ class JLC_ControlNetOrchestratorAdvanced:
                 or (end - start) <= 0
             ):
                 continue
+            
+            current_base = candidate_base
 
             resolved.append({
                 "slot": i,
-                "base": base,
+                "base": candidate_base,
                 "image": image,
                 "strength": strength,
                 "start": start,
