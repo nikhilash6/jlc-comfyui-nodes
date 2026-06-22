@@ -42,8 +42,37 @@ from .nodes.jlc_padded_image import JLC_PaddedImage
 from .nodes.jlc_padded_latent import JLC_PaddedLatent
 from .nodes.jlc_controlnet_apply import JLC_ControlNetApply
 from .nodes.jlc_controlnet_apply_advanced import JLC_ControlNetApplyAdvanced
-from .nodes.jlc_lora_loader_ten_stack import JLC_LoraLoaderTenStack
-from .nodes.jlc_lora_loader_block_weight_two import JLC_LoraLoaderBlockWeightTwo
+
+# LoRA Loaders
+from .nodes.lora_loader_nodes.jlc_dynamic_lora_loader_model_only import (
+    NODE_CLASS_MAPPINGS as MODEL_ONLY_CLASS_MAPPINGS,
+    NODE_DISPLAY_NAME_MAPPINGS as MODEL_ONLY_DISPLAY_NAME_MAPPINGS,
+)
+from .nodes.lora_loader_nodes.jlc_dynamic_lora_loader_model_clip import (
+    NODE_CLASS_MAPPINGS as MODEL_CLIP_CLASS_MAPPINGS,
+    NODE_DISPLAY_NAME_MAPPINGS as MODEL_CLIP_DISPLAY_NAME_MAPPINGS,
+)
+from .nodes.lora_loader_nodes.jlc_dynamic_lora_loader_shared_block_weight_model_only import (
+    NODE_CLASS_MAPPINGS as SHARED_BW_MODEL_ONLY_CLASS_MAPPINGS,
+    NODE_DISPLAY_NAME_MAPPINGS as SHARED_BW_MODEL_ONLY_DISPLAY_NAME_MAPPINGS,
+)
+from .nodes.lora_loader_nodes.jlc_dynamic_lora_loader_shared_block_weight_model_clip import (
+    NODE_CLASS_MAPPINGS as SHARED_BW_MODEL_CLIP_CLASS_MAPPINGS,
+    NODE_DISPLAY_NAME_MAPPINGS as SHARED_BW_MODEL_CLIP_DISPLAY_NAME_MAPPINGS,
+)
+from .nodes.lora_loader_nodes.jlc_dynamic_lora_loader_block_weight_model_only import (
+    NODE_CLASS_MAPPINGS as BLOCK_BW_MODEL_ONLY_CLASS_MAPPINGS,
+    NODE_DISPLAY_NAME_MAPPINGS as BLOCK_BW_MODEL_ONLY_DISPLAY_NAME_MAPPINGS,
+)
+from .nodes.lora_loader_nodes.jlc_dynamic_lora_loader_block_weight_model_clip import (
+    NODE_CLASS_MAPPINGS as BLOCK_BW_MODEL_CLIP_CLASS_MAPPINGS,
+    NODE_DISPLAY_NAME_MAPPINGS as BLOCK_BW_MODEL_CLIP_DISPLAY_NAME_MAPPINGS,
+)
+from .nodes.lora_loader_nodes.jlc_lora_loader_legacy_dynamic_wrappers import (
+    NODE_CLASS_MAPPINGS as LEGACY_DYNAMIC_WRAPPER_CLASS_MAPPINGS,
+    NODE_DISPLAY_NAME_MAPPINGS as LEGACY_DYNAMIC_WRAPPER_DISPLAY_NAME_MAPPINGS,
+)
+
 from .nodes.jlc_seed_generator import JLC_SeedGenerator
 from .nodes.jlc_controlnet_composition import JLC_ControlNetComposition
 from .nodes.jlc_controlnet_orchestrator import JLC_ControlNetOrchestrator
@@ -64,8 +93,15 @@ NODE_CLASS_MAPPINGS = {
     "JLC_PaddedLatent": JLC_PaddedLatent,
     "JLC_ControlNetApply": JLC_ControlNetApply,
     "JLC_ControlNetApplyAdvanced": JLC_ControlNetApplyAdvanced,
-    "JLC_LoraLoaderTenStack": JLC_LoraLoaderTenStack,
-    "JLC_LoraLoaderBlockWeightTwo": JLC_LoraLoaderBlockWeightTwo,
+
+    **MODEL_ONLY_CLASS_MAPPINGS,
+    **MODEL_CLIP_CLASS_MAPPINGS,
+    **SHARED_BW_MODEL_ONLY_CLASS_MAPPINGS,
+    **SHARED_BW_MODEL_CLIP_CLASS_MAPPINGS,
+    **BLOCK_BW_MODEL_ONLY_CLASS_MAPPINGS,
+    **BLOCK_BW_MODEL_CLIP_CLASS_MAPPINGS,
+    **LEGACY_DYNAMIC_WRAPPER_CLASS_MAPPINGS,
+
     "JLC_SeedGenerator": JLC_SeedGenerator,
     "JLC_ControlNetComposition": JLC_ControlNetComposition,
     "JLC_ControlNetOrchestrator": JLC_ControlNetOrchestrator,
@@ -80,8 +116,15 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "JLC_PaddedLatent": "\u2003JLC Padded Latent",
     "JLC_ControlNetApply": "\u2003JLC ControlNet Apply",
     "JLC_ControlNetApplyAdvanced": "\u2003JLC ControlNet Apply (Advanced)",
-    "JLC_LoraLoaderTenStack": "\u2003JLC 10-LoRA Loader",
-    "JLC_LoraLoaderBlockWeightTwo": "\u2003JLC 2-LoRA Loader - Block Weight",
+
+    **MODEL_ONLY_DISPLAY_NAME_MAPPINGS,
+    **MODEL_CLIP_DISPLAY_NAME_MAPPINGS,
+    **SHARED_BW_MODEL_ONLY_DISPLAY_NAME_MAPPINGS,
+    **SHARED_BW_MODEL_CLIP_DISPLAY_NAME_MAPPINGS,
+    **BLOCK_BW_MODEL_ONLY_DISPLAY_NAME_MAPPINGS,
+    **BLOCK_BW_MODEL_CLIP_DISPLAY_NAME_MAPPINGS,
+    **LEGACY_DYNAMIC_WRAPPER_DISPLAY_NAME_MAPPINGS,
+
     "JLC_SeedGenerator": "\u2003JLC Seed Generator",
     "JLC_ControlNetComposition": "\u2003JLC ControlNet Composition",
     "JLC_ControlNetOrchestrator": "\u2003JLC ControlNet Orchestrator",
