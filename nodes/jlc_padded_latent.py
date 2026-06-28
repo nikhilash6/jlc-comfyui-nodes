@@ -60,7 +60,7 @@ from .jlc_padded_image import JLC_PaddedImage
 
 MANIFEST = {
     "name": "JLC Padded Latent (Inpaint/Outpaint)",
-    "version": (1, 0, 0),
+    "version": (1, 0, 1),
     "author": "J. L. Córdova",
     "description": (
         "Combines JLC Padded Image with inpaint conditioning. "
@@ -95,7 +95,13 @@ class JLC_PaddedLatent:
                         "16:9", "8:5", "3:2", "4:3", "1:1",
                         "3:4", "2:3", "5:8", "9:16",
                     ],
-                    {"default": "3:4"},
+                    {
+                        "default": "3:4",
+                        "tooltip": (
+                            "Target canvas aspect ratio in standard width:height "
+                            "notation. Example: 16:9 means width 16, height 9."
+                        ),
+                    },
                 ),
                 "offsetX": ("FLOAT", {
                     "default": 0.5, "min": 0.0, "max": 1.0, "step": 0.01,
@@ -266,5 +272,5 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "JLC_PaddedLatent": "JLC Padded Latent",
+    "JLC_PaddedLatent": "JLC Inpaint-Conditioned Padded Latent",
 }

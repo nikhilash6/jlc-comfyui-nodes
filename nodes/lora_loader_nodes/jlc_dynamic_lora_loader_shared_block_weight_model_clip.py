@@ -50,9 +50,11 @@ JLC LoRA Loader - Multi Model / Shared Block Weight + CLIP
   - Released under the **MIT License**.
 """
 
+from ...jlc_custom_nodes_versions import JLC_LORA_LOADER_VERSION
+
 MANIFEST = {
     "name": "JLC LoRA Loader - Multi Model / Shared Block Weight + CLIP",
-    "version": (1, 0, 0),
+    "version": JLC_LORA_LOADER_VERSION,
     "author": "J. L. Córdova",
     "description": (
         "Dynamic MODEL+CLIP shared-block-weight LoRA loader for ComfyUI. "

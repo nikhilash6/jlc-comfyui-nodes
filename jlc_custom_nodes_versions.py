@@ -1,0 +1,13 @@
+# jlc_custom_nodes_versions.py
+
+# from ...jlc_custom_nodes_versions import JLC_LORA_LOADER_VERSION
+
+JLC_CONTROLNET_VERSION = "1.2.0"
+JLC_CONTROLNET_HELPERS_VERSION = "1.0.0"
+
+JLC_LORA_LOADER_VERSION = "1.2.5"
+JLC_LORA_HELPERS_VERSION = "1.0.0"
+
+JLC_CONTROLNET_AUX_VERSION = "1.0.0"
+
+JLC_UTIL_NODES_VERSION = "0.1.0"

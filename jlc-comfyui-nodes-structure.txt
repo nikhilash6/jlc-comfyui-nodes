@@ -1,0 +1,98 @@
+JLC ComfyUI Nodes Project Structure
+Generated: 2026-06-27 23:37:10
+Root: C:\Users\josel\Stable_Diffusion\ComfyUI_V89\custom_nodes\JLC-ComfyUI-nodes
+Output: C:\Users\josel\Stable_Diffusion\ComfyUI_V89\custom_nodes\JLC-ComfyUI-nodes\jlc-comfyui-nodes-structure.txt
+Gitignore: C:\Users\josel\Stable_Diffusion\ComfyUI_V89\custom_nodes\JLC-ComfyUI-nodes\.gitignore
+MaxDepth: unlimited
+
+JLC-ComfyUI-nodes/
+  .quarantined/
+  assets/
+    icons/
+      jlc-comfyui-nodes_Logo-0032.png
+      jlc-comfyui-nodes_Logo-0064.png
+      jlc-comfyui-nodes_Logo-0128.png
+      jlc-comfyui-nodes_Logo-0256.png
+      jlc-comfyui-nodes_Logo-0512.png
+      jlc-comfyui-nodes_Logo-1024.png
+      jlc-comfyui-nodes_Logo-1436.png
+      jlc-comfyui-nodes_Logo-Dark-0032.png
+      jlc-comfyui-nodes_Logo-Dark-0064.png
+      jlc-comfyui-nodes_Logo-Dark-0128.png
+      jlc-comfyui-nodes_Logo-Dark-0256.png
+      jlc-comfyui-nodes_Logo-Dark-0512.png
+      jlc-comfyui-nodes_Logo-Dark-1024.png
+      jlc-comfyui-nodes_Logo-Dark-1436.png
+    workflows/
+      example_composition_01.png
+      example_composition_02.png
+      example_recursive_01.png
+      example_recursive_02.png
+      jlc_ControlNet_Apply_Advanced.json
+      jlc_ControlNet_Apply_Advanced.png
+      jlc_ControlNet_Composition.json
+      jlc_ControlNet_Composition.png
+      JLC_ControlNet_Orchestrator_Advanced_WorkFlow.json
+      JLC_ControlNet_Orchestrator_Advanced_WorkFlow.png
+      JLC_ControlNet_Orchestrator_WorkFlow.json
+      JLC_ControlNet_Orchestrator_WorkFlow.png
+      jlc_padded_image_Basic_Infill_Outfill.json
+      jlc_padded_image_Basic_Infill_Outfill.png
+      jlc_padded_image_Best_Infill_Outfill.json
+      jlc_padded_image_Best_Infill_Outfill.png
+  docs/
+  nodes/
+    controlnet_aux_nodes/
+      __init__.py
+      jlc_controlnet_aux_preproc_lists.py
+      jlc_controlnet_aux_preproc_wrapper.py
+    engines/
+      jlc_model_cache_core.py
+    lora_loader_nodes/
+      __init__.py
+      jlc_dynamic_lora_loader_block_weight_model_clip.py
+      jlc_dynamic_lora_loader_block_weight_model_only.py
+      jlc_dynamic_lora_loader_model_clip.py
+      jlc_dynamic_lora_loader_model_only.py
+      jlc_dynamic_lora_loader_shared_block_weight_model_clip.py
+      jlc_dynamic_lora_loader_shared_block_weight_model_only.py
+      jlc_lora_dynamic_core.py
+      jlc_lora_loader_legacy_dynamic_wrappers.py
+      jlc_lora_model_only_filter.py
+    util_nodes/
+      __init__.py
+      jlc_seed_generator.py
+      jlc_stage_boundary_vram_cleanup.py
+      TODO_seed_generator_randomize_replay.md
+    __init__.py
+    jlc_controlnet_apply_advanced.py
+    jlc_controlnet_apply.py
+    jlc_controlnet_composition_core.py
+    jlc_controlnet_composition.py
+    jlc_controlnet_orchestrator_adv_dynamic.py
+    jlc_controlnet_orchestrator.py
+    jlc_padded_image.py
+    jlc_padded_latent.py
+  web/
+    assets/
+      icons/
+        jlc-comfyui-nodes_Logo-Dark-0128.png
+    jlc_dynamic_controlnet_aux_preproc_visibility.js
+    jlc_dynamic_controlnet_composition_visibility.js
+    jlc_dynamic_controlnet_orchestrator_adv_visibility.js
+    jlc_dynamic_lora_loader_visibility.js
+    jlc_node_icons.js
+    jlc_seed_display.js
+  __init__.py
+  .gitignore
+  jlc_custom_nodes_versions.py
+  jlc-structure-mapper.ps1
+  LICENSE
+  pyproject.toml
+  README.md
+
+Summary:
+  Folders shown: 14
+  Files shown:   71
+  Items skipped: 14
+  Gitignore patterns loaded: 39

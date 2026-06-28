@@ -44,9 +44,11 @@ JLC Dynamic LoRA Loader Legacy Wrappers
   - Released under the **MIT License**.
 """
 
+from ...jlc_custom_nodes_versions import JLC_LORA_LOADER_VERSION
+
 MANIFEST = {
     "name": "JLC Dynamic LoRA Loader Legacy Wrappers",
-    "version": (1, 0, 0),
+    "version": JLC_LORA_LOADER_VERSION,
     "author": "J. L. Córdova",
     "description": (
         "Minimal compatibility wrapper module for selected legacy JLC LoRA "
@@ -85,12 +87,24 @@ MANIFEST = {
     ),
 }
 
+# -----------------------------------------------------------------------------
+# Deprecation Tooltip Definition
+# -----------------------------------------------------------------------------
+LEGACY_DEPRECATION_TOOLTIP = (
+    "Legacy compatibility node. This node is preserved for older saved "
+    "workflows, but it will be deprecated in a future JLC node release. "
+    "For new or updated workflows, replace it with the new dynamic JLC LoRA "
+    "Loader nodes under the LoRA loader family."
+)
+
 
 # -----------------------------------------------------------------------------
 # Legacy fixed 10-stack: same strength value applied to MODEL and CLIP.
 # -----------------------------------------------------------------------------
 class JLC_LoraLoaderTenStack(LoraStateCacheMixin):
     """Legacy fixed 10-slot MODEL+CLIP LoRA stack wrapper."""
+
+    DESCRIPTION = LEGACY_DEPRECATION_TOOLTIP
 
     FUNCTION = "load_lora"
     CATEGORY = "loaders"
@@ -182,6 +196,8 @@ def _prefer_override(kwargs, key, fallback):
 
 class JLC_LoraLoaderBlockWeightTwo(LoraStateCacheMixin):
     """Legacy fixed 2-LoRA shared MODEL block-weight + CLIP wrapper."""
+
+    DESCRIPTION = LEGACY_DEPRECATION_TOOLTIP
 
     FUNCTION = "load_lora"
     CATEGORY = "loaders"

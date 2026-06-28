@@ -90,6 +90,7 @@ downloads/
 .extras/
 .deprecated/
 .backups/
+.experimental/
 
 # --------------------------------------------------
 # Temporary files

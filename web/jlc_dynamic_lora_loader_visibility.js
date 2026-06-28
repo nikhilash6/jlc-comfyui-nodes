@@ -120,6 +120,50 @@ function resizeNodeToVisibleWidgets(node) {
     }
 }
 
+const JLC_PRIMARY_BUTTON_BLUE = "#0B8CE9";
+const JLC_PRIMARY_BUTTON_TEXT = "#FFFFFF";
+
+function roundedRectPath(ctx, x, y, width, height, radius) {
+    const r = Math.min(radius, width / 2, height / 2);
+
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + width - r, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+    ctx.lineTo(x + width, y + height - r);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+    ctx.lineTo(x + r, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+}
+
+function stylePrimaryButton(widget) {
+    widget.draw = function (ctx, node, widgetWidth, y, widgetHeight) {
+        const marginX = 10;
+        const marginY = 2;
+        const x = marginX;
+        const h = Math.max(18, widgetHeight - marginY * 2);
+        const w = Math.max(40, widgetWidth - marginX * 2);
+        const buttonY = y + marginY;
+
+        ctx.save();
+
+        roundedRectPath(ctx, x, buttonY, w, h, 5);
+        ctx.fillStyle = JLC_PRIMARY_BUTTON_BLUE;
+        ctx.fill();
+
+        ctx.fillStyle = JLC_PRIMARY_BUTTON_TEXT;
+        ctx.font = "bold 12px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(widget.name, x + w / 2, buttonY + h / 2);
+
+        ctx.restore();
+    };
+}
+
 function slotSuffix(index) {
     return String(index).padStart(2, "0");
 }
@@ -201,9 +245,11 @@ function installDynamicLoRAVisibility(node, config) {
         return result;
     };
 
-    node.addWidget("button", UPDATE_BUTTON_LABEL, null, () => {
+    const updateButton = node.addWidget("button", UPDATE_BUTTON_LABEL, null, () => {
         applyVisibleSlotCount(node, config);
     });
+
+    stylePrimaryButton(updateButton);
 
     requestAnimationFrame(() => applyVisibleSlotCount(node, config));
 }

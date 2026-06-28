@@ -36,6 +36,7 @@ JLC LoRA Loader - Multi-Model / Shared Block Weight
     - Active LoRAs are applied sequentially in visible slot order.
     - The shared block_vector affects MODEL/UNet patch weights only.
     - CLIP is never patched by this node.
+    - Text-encoder/CLIP LoRA keys are ignored by design before loading.
 
 - Attribution & License
   - Concept and implementation by **J. L. Córdova**
@@ -49,9 +50,11 @@ JLC LoRA Loader - Multi-Model / Shared Block Weight
   - Released under the **MIT License**.
 """
 
+from ...jlc_custom_nodes_versions import JLC_LORA_LOADER_VERSION
+
 MANIFEST = {
     "name": "JLC LoRA Loader - Multi-Model / Shared Block Weight",
-    "version": (1, 2, 0),
+    "version": JLC_LORA_LOADER_VERSION,
     "author": "J. L. Córdova",
     "description": (
         "Dynamic MODEL-only shared-block-weight LoRA loader for ComfyUI. "
@@ -60,10 +63,15 @@ MANIFEST = {
         "as authoritative, ignores hidden slots, preserves serialized hidden "
         "values, and applies active LoRAs sequentially in visible slot order. "
         "One shared block_vector controls MODEL/UNet block weighting for all "
-        "active slots. CLIP is not patched."
+        "active slots. CLIP is not patched; text-encoder/CLIP LoRA keys are ignored by design."
     ),
 }
 
+
+from .jlc_lora_model_only_filter import (
+    filter_lora_state_for_model_only,
+    print_model_only_lora_filter_summary,
+)
 
 from .jlc_lora_dynamic_core import (
     DEFAULT_BLOCK_VECTOR,
@@ -142,6 +150,7 @@ class JLC_DynamicLoraLoaderSharedBlockWeightModelOnly(LoraStateCacheMixin):
 
         active = []
         inactive = []
+        ignored_te_clip_total = 0
 
         for slot in slots:
             slot_i = slot["i"]
@@ -155,12 +164,18 @@ class JLC_DynamicLoraLoaderSharedBlockWeightModelOnly(LoraStateCacheMixin):
             active.append(slot_i)
 
             lora_state = self._load_lora_state(lora_name)
+            lora_state, ignored_te_clip = filter_lora_state_for_model_only(
+                lora_state
+            )
+            ignored_te_clip_total += ignored_te_clip
             model = apply_lora_model_only_with_block_vector(
                 model,
                 lora_state,
                 strength_model,
                 vector,
             )
+
+        print_model_only_lora_filter_summary(ignored_te_clip_total)
 
         print_slot_summary(
             "JLC-Dynamic-Shared-Block-LoRA-ModelOnly",
@@ -180,7 +195,6 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "JLC_DynamicLoraLoaderSharedBlockWeightModelOnly": (
+    "JLC_DynamicLoraLoaderSharedBlockWeightModelOnly":
         "\u2003JLC LoRA Loader - Multi-Model / Shared Block Weight",
-    )
 }

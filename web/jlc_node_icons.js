@@ -3,18 +3,43 @@ import { app } from "/scripts/app.js";
 const ICON_SIZE = 12;
 const JLC_PREFIX = "JLC_";
 
+// CaptionForge nodes are branded by the CaptionForge repo, not this repo.
+const EXCLUDED_PREFIXES = [
+    "JLC_Qwen",
+    "JLC_Joy",
+    "JLC_Florence",
+];
+
 let iconImage = new Image();
 iconImage.src = "/extensions/JLC-ComfyUI-nodes/assets/icons/jlc-comfyui-nodes_Logo-Dark-0128.png";
+
+function isOldJlcNode(nodeData) {
+    if (!nodeData || !nodeData.name) {
+        return false;
+    }
+
+    if (!nodeData.name.startsWith(JLC_PREFIX)) {
+        return false;
+    }
+
+    return !EXCLUDED_PREFIXES.some((prefix) =>
+        nodeData.name.startsWith(prefix)
+    );
+}
 
 app.registerExtension({
     name: "JLC.NodeIcons",
 
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
-
-        // 🔒 Only apply to JLC nodes
-        if (!nodeData.name.startsWith(JLC_PREFIX)) {
+        if (!isOldJlcNode(nodeData)) {
             return;
         }
+
+        if (nodeType.prototype.__jlcBrandingApplied) {
+            return;
+        }
+
+        nodeType.prototype.__jlcBrandingApplied = true;
 
         const origOnDrawForeground = nodeType.prototype.onDrawForeground;
 
@@ -23,8 +48,9 @@ app.registerExtension({
                 origOnDrawForeground.apply(this, arguments);
             }
 
-            // if (this.flags.collapsed) return;
-            if (!iconImage.complete) return;
+            if (!iconImage.complete) {
+                return;
+            }
 
             ctx.save();
 
@@ -44,6 +70,5 @@ app.registerExtension({
 
             ctx.restore();
         };
-
     }
 });

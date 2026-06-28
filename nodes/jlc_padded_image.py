@@ -61,7 +61,7 @@ import torch
 
 MANIFEST = {
     "name": "JLC Padded Image (Inpaint / Outpaint Canvas Builder)",
-    "version": (1, 0, 0),
+    "version": (1, 0, 1),
     "author": "J. L. Córdova",
     "description": (
         "Creates a padded canvas and aligned mask for inpainting and "
@@ -94,7 +94,13 @@ class JLC_PaddedImage:
                         "16:9", "8:5", "3:2", "4:3", "1:1",
                         "3:4", "2:3", "5:8", "9:16",
                     ],
-                    {"default": "3:4"},
+                    {
+                        "default": "3:4",
+                        "tooltip": (
+                            "Target canvas aspect ratio in standard width:height "
+                            "notation. Example: 16:9 means width 16, height 9."
+                        ),
+                    },
                 ),
                 "offsetX": ("FLOAT", {
                     "default": 0.5, "min": 0.0, "max": 1.0, "step": 0.01,
@@ -135,20 +141,24 @@ class JLC_PaddedImage:
         width, height = image.size
         oldAspectRat = height / width
 
+        # User-facing labels are standard width:height.
+        # The internal placement/scaling math uses height / width, so each
+        # label is converted to b / a. This keeps the existing node logic
+        # while making 16:9 mean wide and 9:16 mean tall, as expected.
         aspect_ratios = {
-            "16:9": 16 / 9,
-            "8:5": 8 / 5,
-            "3:2": 3 / 2,
-            "4:3": 4 / 3,
+            "16:9": 9 / 16,
+            "8:5": 5 / 8,
+            "3:2": 2 / 3,
+            "4:3": 3 / 4,
             "1:1": 1.0,
-            "3:4": 3 / 4,
-            "2:3": 2 / 3,
-            "5:8": 5 / 8,
-            "9:16": 9 / 16,
+            "3:4": 4 / 3,
+            "2:3": 3 / 2,
+            "5:8": 8 / 5,
+            "9:16": 16 / 9,
         }
         newAspectRat = aspect_ratios[newAspectRat]
 
-        # Define the new canvas based on maxCanvas and newAspectRat
+        # Define the new canvas based on maxCanvas and internal height/width ratio.
         if newAspectRat > 1:
             new_dim_x, new_dim_y = int(maxCanvas / newAspectRat), maxCanvas
         else:

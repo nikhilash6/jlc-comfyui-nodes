@@ -31,6 +31,7 @@ JLC LoRA Loader - Multi Model
     - Hidden slot values remain serialized in the workflow.
     - Active LoRAs are applied sequentially in visible slot order.
     - CLIP is never patched by this node.
+    - Text-encoder/CLIP LoRA keys are ignored by design before loading.
 
 - Attribution & License
   - Concept and implementation by **J. L. Córdova**
@@ -44,18 +45,25 @@ JLC LoRA Loader - Multi Model
   - Released under the **MIT License**.
 """
 
+from ...jlc_custom_nodes_versions import JLC_LORA_LOADER_VERSION
+
 MANIFEST = {
     "name": "JLC LoRA Loader - Multi Model",
-    "version": (1, 2, 0),
+    "version": JLC_LORA_LOADER_VERSION,
     "author": "J. L. Córdova",
     "description": (
         "Dynamic MODEL-only LoRA loader for ComfyUI. Predeclares up to 10 LoRA "
         "slots and uses frontend JavaScript to show or hide rows according to "
         "slot_count. The backend treats slot_count as authoritative, ignores "
         "hidden slots, preserves serialized hidden values, and applies active "
-        "LoRAs sequentially in visible slot order. CLIP is not patched."
+        "LoRAs sequentially in visible slot order. CLIP is not patched; text-encoder/CLIP LoRA keys are ignored by design."
     ),
 }
+
+from .jlc_lora_model_only_filter import (
+    filter_lora_state_for_model_only,
+    print_model_only_lora_filter_summary,
+)
 
 from .jlc_lora_dynamic_core import (
     MAX_LORA_SLOTS,
@@ -111,6 +119,7 @@ class JLC_DynamicLoraLoaderModelOnly(LoraStateCacheMixin):
 
         active = []
         inactive = []
+        ignored_te_clip_total = 0
 
         for slot in slots:
             slot_i = slot["i"]
@@ -124,11 +133,17 @@ class JLC_DynamicLoraLoaderModelOnly(LoraStateCacheMixin):
             active.append(slot_i)
 
             lora_state = self._load_lora_state(lora_name)
+            lora_state, ignored_te_clip = filter_lora_state_for_model_only(
+                lora_state
+            )
+            ignored_te_clip_total += ignored_te_clip
             model = apply_lora_model_only(
                 model,
                 lora_state,
                 strength_model,
             )
+
+        print_model_only_lora_filter_summary(ignored_te_clip_total)
 
         print_slot_summary(
             "JLC-Dynamic-LoRA-Loader-ModelOnly",
@@ -146,7 +161,6 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "JLC_DynamicLoraLoaderModelOnly": (
+    "JLC_DynamicLoraLoaderModelOnly":
         "\u2003JLC LoRA Loader - Multi Model",
-    )
 }

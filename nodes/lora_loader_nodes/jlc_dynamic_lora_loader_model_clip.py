@@ -45,9 +45,11 @@ JLC LoRA Loader - Multi-Model / CLIP
   - Released under the **MIT License**.
 """
 
+from ...jlc_custom_nodes_versions import JLC_LORA_LOADER_VERSION
+
 MANIFEST = {
     "name": "JLC LoRA Loader - Multi-Model / CLIP",
-    "version": (1, 0, 0),
+    "version": JLC_LORA_LOADER_VERSION,
     "author": "J. L. Córdova",
     "description": (
         "Dynamic MODEL+CLIP LoRA loader for ComfyUI. Predeclares up to 10 LoRA "
@@ -158,5 +160,6 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "JLC_DynamicLoraLoaderModelClip": "\u2003JLC LoRA Loader - Multi-Model / CLIP",
+    "JLC_DynamicLoraLoaderModelClip":
+        "\u2003JLC LoRA Loader - Multi-Model / CLIP",
 }

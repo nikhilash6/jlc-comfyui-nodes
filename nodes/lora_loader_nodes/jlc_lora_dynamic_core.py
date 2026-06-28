@@ -51,6 +51,8 @@ JLC Dynamic LoRA Loader Core Helpers
 
 from __future__ import annotations
 
+from ...jlc_custom_nodes_versions import JLC_LORA_HELPERS_VERSION
+
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import comfy.lora

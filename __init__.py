@@ -32,113 +32,110 @@ JLC ComfyUI Custom Nodes
   License: MIT
 """
 
-# __init__.py  (JLC-Tests-comfyui)
-
 import os
-import sys
 from server import PromptServer  # used for static route mounting
 
+# ControlNet Nodes
 from .nodes.jlc_padded_image import JLC_PaddedImage
 from .nodes.jlc_padded_latent import JLC_PaddedLatent
 from .nodes.jlc_controlnet_apply import JLC_ControlNetApply
 from .nodes.jlc_controlnet_apply_advanced import JLC_ControlNetApplyAdvanced
-
-# LoRA Loaders
-from .nodes.lora_loader_nodes.jlc_dynamic_lora_loader_model_only import (
-    NODE_CLASS_MAPPINGS as MODEL_ONLY_CLASS_MAPPINGS,
-    NODE_DISPLAY_NAME_MAPPINGS as MODEL_ONLY_DISPLAY_NAME_MAPPINGS,
-)
-from .nodes.lora_loader_nodes.jlc_dynamic_lora_loader_model_clip import (
-    NODE_CLASS_MAPPINGS as MODEL_CLIP_CLASS_MAPPINGS,
-    NODE_DISPLAY_NAME_MAPPINGS as MODEL_CLIP_DISPLAY_NAME_MAPPINGS,
-)
-from .nodes.lora_loader_nodes.jlc_dynamic_lora_loader_shared_block_weight_model_only import (
-    NODE_CLASS_MAPPINGS as SHARED_BW_MODEL_ONLY_CLASS_MAPPINGS,
-    NODE_DISPLAY_NAME_MAPPINGS as SHARED_BW_MODEL_ONLY_DISPLAY_NAME_MAPPINGS,
-)
-from .nodes.lora_loader_nodes.jlc_dynamic_lora_loader_shared_block_weight_model_clip import (
-    NODE_CLASS_MAPPINGS as SHARED_BW_MODEL_CLIP_CLASS_MAPPINGS,
-    NODE_DISPLAY_NAME_MAPPINGS as SHARED_BW_MODEL_CLIP_DISPLAY_NAME_MAPPINGS,
-)
-from .nodes.lora_loader_nodes.jlc_dynamic_lora_loader_block_weight_model_only import (
-    NODE_CLASS_MAPPINGS as BLOCK_BW_MODEL_ONLY_CLASS_MAPPINGS,
-    NODE_DISPLAY_NAME_MAPPINGS as BLOCK_BW_MODEL_ONLY_DISPLAY_NAME_MAPPINGS,
-)
-from .nodes.lora_loader_nodes.jlc_dynamic_lora_loader_block_weight_model_clip import (
-    NODE_CLASS_MAPPINGS as BLOCK_BW_MODEL_CLIP_CLASS_MAPPINGS,
-    NODE_DISPLAY_NAME_MAPPINGS as BLOCK_BW_MODEL_CLIP_DISPLAY_NAME_MAPPINGS,
-)
-from .nodes.lora_loader_nodes.jlc_lora_loader_legacy_dynamic_wrappers import (
-    NODE_CLASS_MAPPINGS as LEGACY_DYNAMIC_WRAPPER_CLASS_MAPPINGS,
-    NODE_DISPLAY_NAME_MAPPINGS as LEGACY_DYNAMIC_WRAPPER_DISPLAY_NAME_MAPPINGS,
-)
-
-from .nodes.jlc_seed_generator import JLC_SeedGenerator
 from .nodes.jlc_controlnet_composition import JLC_ControlNetComposition
 from .nodes.jlc_controlnet_orchestrator import JLC_ControlNetOrchestrator
-from .nodes.jlc_controlnet_orchestrator_adv import JLC_ControlNetOrchestratorAdvanced
-from .nodes.jlc_controlnet_orchestrator_hyper import JLC_ControlNetOrchestratorHyper
-# from .nodes.jlc_cuda_cleanup import JLC_CudaCleanup
+from .nodes.jlc_controlnet_orchestrator_adv_dynamic import JLC_DynamicControlNetOrchestratorAdvanced
+from .nodes.controlnet_aux_nodes.jlc_controlnet_aux_preproc_wrapper import JLC_DynamicAuxPreprocessorWrapper
 
+# LoRA Loaders
+from .nodes.lora_loader_nodes.jlc_dynamic_lora_loader_model_only import JLC_DynamicLoraLoaderModelOnly
+from .nodes.lora_loader_nodes.jlc_dynamic_lora_loader_model_clip import JLC_DynamicLoraLoaderModelClip
+from .nodes.lora_loader_nodes.jlc_dynamic_lora_loader_shared_block_weight_model_only import JLC_DynamicLoraLoaderSharedBlockWeightModelOnly
+from .nodes.lora_loader_nodes.jlc_dynamic_lora_loader_shared_block_weight_model_clip import JLC_DynamicLoraLoaderSharedBlockWeightModelClip
+from .nodes.lora_loader_nodes.jlc_dynamic_lora_loader_block_weight_model_only import JLC_DynamicLoraLoaderBlockWeightModelOnly
+from .nodes.lora_loader_nodes.jlc_dynamic_lora_loader_block_weight_model_clip import JLC_DynamicLoraLoaderBlockWeightModelClip
 
-print("🧠 JLC Nodes Loaded:")
-# print("🔥 INIT LOADED:", __file__)
+# Legacy LoRA wrappers: this file exports two legacy node.
+from .nodes.lora_loader_nodes.jlc_lora_loader_legacy_dynamic_wrappers import (
+    NODE_CLASS_MAPPINGS as legacy_lora_class_mappings,
+    NODE_DISPLAY_NAME_MAPPINGS as legacy_lora_display_name_mappings,
+)
 
-# for name, mod in sys.modules.items():
-#     if "jlc" in name.lower():
-#         print("🧠 JLC MODULE:", name, getattr(mod, "__file__", None))
+# Utility Nodes
+from .nodes.util_nodes.jlc_seed_generator import JLC_SeedGenerator
+from .nodes.util_nodes.jlc_stage_boundary_vram_cleanup import JLC_StageBoundaryVRAMCleanup
+
 
 NODE_CLASS_MAPPINGS = {
+    # ControlNet Nodes
     "JLC_PaddedImage": JLC_PaddedImage,
     "JLC_PaddedLatent": JLC_PaddedLatent,
     "JLC_ControlNetApply": JLC_ControlNetApply,
     "JLC_ControlNetApplyAdvanced": JLC_ControlNetApplyAdvanced,
-
-    **MODEL_ONLY_CLASS_MAPPINGS,
-    **MODEL_CLIP_CLASS_MAPPINGS,
-    **SHARED_BW_MODEL_ONLY_CLASS_MAPPINGS,
-    **SHARED_BW_MODEL_CLIP_CLASS_MAPPINGS,
-    **BLOCK_BW_MODEL_ONLY_CLASS_MAPPINGS,
-    **BLOCK_BW_MODEL_CLIP_CLASS_MAPPINGS,
-    **LEGACY_DYNAMIC_WRAPPER_CLASS_MAPPINGS,
-
-    "JLC_SeedGenerator": JLC_SeedGenerator,
     "JLC_ControlNetComposition": JLC_ControlNetComposition,
     "JLC_ControlNetOrchestrator": JLC_ControlNetOrchestrator,
-    "JLC_ControlNetOrchestratorAdvanced": JLC_ControlNetOrchestratorAdvanced,
-    "JLC_ControlNetOrchestratorHyper": JLC_ControlNetOrchestratorHyper,
-    # "JLC_CudaCleanup": JLC_CudaCleanup,
+    "JLC_DynamicControlNetOrchestratorAdvanced": JLC_DynamicControlNetOrchestratorAdvanced,
+    "JLC_DynamicAuxPreprocessorWrapper": JLC_DynamicAuxPreprocessorWrapper,
+
+    # LoRA Loaders
+    "JLC_DynamicLoraLoaderModelOnly": JLC_DynamicLoraLoaderModelOnly,
+    "JLC_DynamicLoraLoaderModelClip": JLC_DynamicLoraLoaderModelClip,
+    "JLC_DynamicLoraLoaderSharedBlockWeightModelOnly": JLC_DynamicLoraLoaderSharedBlockWeightModelOnly,
+    "JLC_DynamicLoraLoaderSharedBlockWeightModelClip": JLC_DynamicLoraLoaderSharedBlockWeightModelClip,
+    "JLC_DynamicLoraLoaderBlockWeightModelOnly": JLC_DynamicLoraLoaderBlockWeightModelOnly,
+    "JLC_DynamicLoraLoaderBlockWeightModelClip": JLC_DynamicLoraLoaderBlockWeightModelClip,
+
+    # Legacy LoRA wrappers
+    #   - JLC_LoraLoaderTenStack
+    #   - JLC_LoraLoaderBlockWeightTwo
+    # Delete this merge if you want zero legacy nodes.
+    **legacy_lora_class_mappings,
+
+    # Utility Nodes
+    "JLC_SeedGenerator": JLC_SeedGenerator,
+    "JLC_StageBoundaryVRAMCleanup": JLC_StageBoundaryVRAMCleanup,
 }
 
-# Keep \u2003 (em-dash) leading space in names to avoid logo overlap;
+
+# Keep \u2003 leading em-space in names to avoid logo overlap.
 NODE_DISPLAY_NAME_MAPPINGS = {
+    # ControlNet Nodes
     "JLC_PaddedImage": "\u2003JLC Padded Image",
     "JLC_PaddedLatent": "\u2003JLC Padded Latent",
     "JLC_ControlNetApply": "\u2003JLC ControlNet Apply",
     "JLC_ControlNetApplyAdvanced": "\u2003JLC ControlNet Apply (Advanced)",
-
-    **MODEL_ONLY_DISPLAY_NAME_MAPPINGS,
-    **MODEL_CLIP_DISPLAY_NAME_MAPPINGS,
-    **SHARED_BW_MODEL_ONLY_DISPLAY_NAME_MAPPINGS,
-    **SHARED_BW_MODEL_CLIP_DISPLAY_NAME_MAPPINGS,
-    **BLOCK_BW_MODEL_ONLY_DISPLAY_NAME_MAPPINGS,
-    **BLOCK_BW_MODEL_CLIP_DISPLAY_NAME_MAPPINGS,
-    **LEGACY_DYNAMIC_WRAPPER_DISPLAY_NAME_MAPPINGS,
-
-    "JLC_SeedGenerator": "\u2003JLC Seed Generator",
     "JLC_ControlNetComposition": "\u2003JLC ControlNet Composition",
     "JLC_ControlNetOrchestrator": "\u2003JLC ControlNet Orchestrator",
-    "JLC_ControlNetOrchestratorAdvanced": "\u2003JLC ControlNet Orchestrator (Advanced)",
-    "JLC_ControlNetOrchestratorHyper": "\u2003JLC ControlNet Orchestrator (Hyper - Flux)",
-    # "JLC_CudaCleanup": "\u2003JLC_CudaCleanup",
+    "JLC_DynamicControlNetOrchestratorAdvanced": "\u2003JLC Orchestrator (Advanced)",
+    "JLC_DynamicAuxPreprocessorWrapper": "\u2003JLC Dynamic Aux Preprocessor Wrapper",
+
+    # LoRA Loaders
+    "JLC_DynamicLoraLoaderModelOnly": "\u2003JLC LoRA Loader - Multi Model",
+    "JLC_DynamicLoraLoaderModelClip": "\u2003JLC LoRA Loader - Multi-Model / CLIP",
+    "JLC_DynamicLoraLoaderSharedBlockWeightModelOnly": "\u2003JLC LoRA Loader - Multi-Model / Shared Block Weight",
+    "JLC_DynamicLoraLoaderSharedBlockWeightModelClip": "\u2003JLC LoRA Loader - Multi Model / Shared Block Weight + CLIP",
+    "JLC_DynamicLoraLoaderBlockWeightModelOnly": "\u2003JLC LoRA Loader - Multi-Model / Block Weight",
+    "JLC_DynamicLoraLoaderBlockWeightModelClip": "\u2003JLC LoRA Loader - Multi-Model / CLIP + Block Weight",
+
+    # Legacy LoRA wrappers. Delete this to not load legacy nodes.
+    **legacy_lora_display_name_mappings,
+
+    # Utility Nodes
+    "JLC_SeedGenerator": "\u2003JLC Seed Generator",
+    "JLC_StageBoundaryVRAMCleanup": "\u2003JLC Stage Boundary VRAM Cleanup",
 }
+
+
+JLC_NODES_ICON = "🧠"
+JLC_NODES_NAME = f"{JLC_NODES_ICON} JLC ComfyUI Nodes"
+print(f"{JLC_NODES_NAME} loading...")
+for node_name in sorted(NODE_CLASS_MAPPINGS.keys()):
+    print(f"  {node_name}")
+print(f"{JLC_NODES_NAME} loaded {len(NODE_CLASS_MAPPINGS)} nodes.")
+
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
 
 # Path to web folder
-
-WEB_DIRECTORY = "web"
-
+WEB_DIRECTORY = "./web"
 WEB_DIR = os.path.join(os.path.dirname(__file__), "web")
 
 # Mount it into ComfyUI frontend
@@ -147,5 +144,5 @@ ps = PromptServer.instance
 if os.path.exists(WEB_DIR):
     ps.app.router.add_static(
         "/extensions/JLC-ComfyUI-nodes",
-        WEB_DIR
+        WEB_DIR,
     )
