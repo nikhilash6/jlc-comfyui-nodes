@@ -11,6 +11,38 @@
 [![License](https://img.shields.io/badge/license-MIT-green)]()
 ![Status](https://img.shields.io/badge/status-active-brightgreen)
 
+# JLC ComfyUI Nodes
+
+<p align="center">
+  <img src="assets/icons/jlc-comfyui-nodes_Logo-0512.png" width="120">
+  &nbsp;&nbsp;&nbsp;
+  <img src="assets/icons/jlc-comfyui-nodes_Logo-Dark-0512.png" width="120">
+</p>
+
+[![ComfyUI Registry](https://img.shields.io/badge/Available%20on-ComfyUI%20Registry-blue)](https://registry.comfy.org/packages/jlc-comfyui-nodes)
+[![ComfyUI](https://img.shields.io/badge/ComfyUI-Custom%20Nodes-blue)]()
+[![License](https://img.shields.io/badge/license-MIT-green)]()
+![Status](https://img.shields.io/badge/status-active-brightgreen)
+
+> [!WARNING]
+> **Temporary ControlNet compatibility notice**
+>
+> Recent ComfyUI sampler changes appear to affect the older JLC ControlNet Composition and Orchestrator wrappers.
+> I am actively testing compatibility with current ComfyUI builds.
+>
+> If you rely on the ControlNet Composition or Orchestrator nodes for production workflows, please keep a backup of your working install before updating.
+>
+> Bug reports are welcome, especially with:
+> - ComfyUI version or commit
+> - JLC node used
+> - workflow screenshot or JSON, if shareable
+> - console log
+> - GPU and VRAM amount
+
+---
+
+## Featured Nodes in this Release: JLC ControlNet Orchestrator (Base & Advanced)
+
 ---
 
 ## Featured Nodes in this Release: JLC ControlNet Orchestrator (Base & Advanced)
