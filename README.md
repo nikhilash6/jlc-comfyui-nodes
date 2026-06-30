@@ -24,25 +24,24 @@
 [![License](https://img.shields.io/badge/license-MIT-green)]()
 ![Status](https://img.shields.io/badge/status-active-brightgreen)
 
-## Warning
-
-### ControlNet compatibility notice
-
-Recent ComfyUI sampler changes affected the older JLC ControlNet Composition and Orchestrator wrappers.
-
-We believe the issue is now fixed in the current `main` branch, including updated ControlNet Composition, Orchestrator, Advanced Orchestrator, and related frontend slot-visibility support. However, testing is still ongoing, so please proceed with caution.
-
-If you rely on the ControlNet Composition or Orchestrator nodes for production workflows, keep a backup of your working install before updating.
-
-Detailed documentation will follow shortly.
-
-Bug reports are welcome, especially with:
-
-- ComfyUI version or commit
-- JLC node used
-- Workflow screenshot or JSON, if shareable
-- Console log
-- GPU and VRAM amount
+> [!WARNING]
+> **Temporary ControlNet compatibility notice**
+>
+> Recent ComfyUI sampler changes affected the older JLC ControlNet Composition and Orchestrator wrappers.
+>
+> We believe the issue is now fixed in the current `main` branch, including updated ControlNet Composition, Orchestrator, Advanced Orchestrator, and related frontend slot-visibility support. However, testing is still ongoing, so please proceed with caution.
+>
+> If you rely on the ControlNet Composition or Orchestrator nodes for production workflows, keep a backup of your working install before updating.
+>
+> Detailed documentation will follow shortly.
+>
+> Bug reports are welcome, especially with:
+>
+> - ComfyUI version or commit
+> - JLC node used
+> - Workflow screenshot or JSON, if shareable
+> - Console log
+> - GPU and VRAM amount
 
 ---
 
