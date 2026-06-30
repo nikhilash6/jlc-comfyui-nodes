@@ -1,7 +1,7 @@
 /*
- * JLC Dynamic ControlNet Orchestrator Advanced Visibility Helpers
- * ----------------------------------------------------------------
- * Frontend companion for the internal-loader JLC ControlNet Orchestrator.
+ * JLC Dynamic ControlNet Orchestrator Visibility Helpers
+ * ------------------------------------------------------
+ * Frontend companion for the wired JLC ControlNet Orchestrator.
  */
 
 const { app } = window.comfyAPI.app;
@@ -10,13 +10,14 @@ const MAX_SLOTS = 10;
 const SLOT_COUNT_WIDGET = "slot_count";
 const UPDATE_BUTTON_LABEL = "Update Visible Slots";
 const NODE_NAMES = new Set([
-    "JLC_ControlNetOrchestratorAdvanced",
+    "JLC_ControlNetOrchestrator",
+    "JLC_DynamicControlNetOrchestrator",
 ]);
 
 const JLC_PRIMARY_BUTTON_BLUE = "#0B8CE9";
 const JLC_PRIMARY_BUTTON_TEXT = "#FFFFFF";
-const LAYOUT_KEY = "__jlc_dynamic_controlnet_orchestrator_adv_layout";
-const INSTALL_FLAG = "__jlc_dynamic_controlnet_orchestrator_adv_installed";
+const LAYOUT_KEY = "__jlc_dynamic_controlnet_orchestrator_layout";
+const INSTALL_FLAG = "__jlc_dynamic_controlnet_orchestrator_installed";
 
 function slotSuffix(index) {
     return String(index).padStart(2, "0");
@@ -25,7 +26,7 @@ function slotSuffix(index) {
 function slotWidgetNames(index) {
     const suffix = slotSuffix(index);
     return [
-        `control_net_name_${suffix}`,
+        `enabled_${suffix}`,
         `strength_${suffix}`,
         `start_${suffix}`,
         `end_${suffix}`,
@@ -36,6 +37,7 @@ function slotWidgetNames(index) {
 function slotInputNames(index) {
     const suffix = slotSuffix(index);
     return [
+        { name: `control_net_${suffix}`, type: "CONTROL_NET", options: {} },
         { name: `image_${suffix}`, type: "IMAGE", options: { shape: 7 } },
     ];
 }
@@ -217,7 +219,7 @@ function install(node) {
 }
 
 app.registerExtension({
-    name: "JLC.DynamicControlNetOrchestratorAdvanced.Visibility",
+    name: "JLC.DynamicControlNetOrchestrator.Visibility",
     async beforeRegisterNodeDef(nodeType, nodeData) {
         if (!NODE_NAMES.has(nodeData?.name)) return;
         const originalOnNodeCreated = nodeType.prototype.onNodeCreated;

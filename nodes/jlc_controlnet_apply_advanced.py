@@ -5,67 +5,38 @@ JLC ControlNet Apply (Advanced)
   - This node is part of the **JLC Custom Nodes for ComfyUI**
     collection developed by **J. L. Córdova**.
 
-  - Repository
-    https://github.com/Damkohler/jlc-comfyui-nodes
-
-  - The JLC nodes focus on practical workflow improvements for
-    image generation pipelines, particularly:
-        • Flux-based workflows
-        • LoRA experimentation
-        • advanced inpainting / outpainting pipelines
-
 - Node Purpose
-    - The **JLC ControlNet Apply (Advanced)** node applies a ControlNet
-      to both positive and negative conditioning streams.
+    - Applies a ControlNet to both positive and negative conditioning streams.
+    - Supports optional upstream CONTROL_NET input or internal dropdown loading.
+    - Uses the shared JLC model residency cache for internally loaded ControlNet
+      base objects only.
 
-    - This version integrates ControlNet loading and reuse through the
-      shared JLC model residency cache core instead of maintaining a
-      node-local cache.
-
-    - The node supports two ControlNet sourcing modes:
-            • Upstream `control_net` input (direct chained reuse)
-            • Internal loading via `control_net_name` dropdown, with
-              process-local reuse handled by `jlc_model_cache_core`
-
-    - ControlNet source priority:
-            1. If `control_net` input is connected → reuse the provided object
-            2. Otherwise → load/reuse the selected `control_net_name` through
-               the shared JLC model cache core
-
-    - When disabled (or strength = 0):
-            • No ControlNet is loaded
-            • All inputs pass through unchanged
-
-    - This design:
-            • Preserves ComfyUI's stateless graph execution model
-            • Keeps ControlNet application logic aligned with ComfyUI's native
-              Apply ControlNet behavior
-            • Reuses resident ControlNet base models through a shared,
-              family-aware LRU cache
-            • Leaves sampler-facing ControlNet copies isolated per conditioning
-              chain exactly as before
+- Safety / Architecture Notes
+    - The shared cache owns only resident base ControlNet objects.
+    - Conditioning is always applied to per-execution `.copy()` instances.
+    - The cached base object is never passed through `set_cond_hint()`.
+    - No `_jlc_dirty` marker is needed because cached residents remain raw bases.
+    - Native Comfy chain semantics are preserved via `set_previous_controlnet()`.
 
 - Attribution & License
   - Concept and implementation by **J. L. Córdova**
     with development assistance from **ChatGPT (OpenAI)**.
 
-  - Adapted from the **ControlNetApply** node in:
+  - Adapted from the **ControlNetApplyAdvanced** node in:
     https://github.com/comfyanonymous/ComfyUI
 
   - Copyright (c) 2026 J. L. Córdova
-
   - Released under the **MIT License**.
 """
 
-from ..jlc_custom_nodes_versions import JLC_CONTROLNET_VERSION
-
 MANIFEST = {
     "name": "JLC ControlNet Apply (Advanced)",
-    "version": JLC_CONTROLNET_VERSION,
+    "version": (1, 1, 3),
     "author": "J. L. Córdova",
     "description": (
-        "ControlNet apply node with integrated loader using the shared JLC "
-        "model residency cache core."
+        "ControlNet apply node with integrated dropdown loading through the "
+        "shared JLC model residency cache. Preserves native ControlNet chain "
+        "semantics and keeps cached objects as raw base residents."
     ),
 }
 
@@ -76,110 +47,25 @@ import comfy.controlnet
 
 try:
     from .engines.jlc_model_cache_core import (
-        cache_info,
-        get_controlnet_cache_capacity,
-        get_or_load_model,
         make_controlnet_cache_key,
+        get_or_load_model,
+        cache_keys,
+        get_family_capacity,
     )
 except ImportError:
-    from .engines.jlc_model_cache_core import (  # type: ignore
-        cache_info,
-        get_controlnet_cache_capacity,
-        get_or_load_model,
+    from jlc_model_cache_core import (  # type: ignore
         make_controlnet_cache_key,
+        get_or_load_model,
+        cache_keys,
+        get_family_capacity,
     )
 
 
-# Optional debug flag. Leave True for maintenance/testing; set False if console
-# output becomes too noisy for release builds.
 DEBUG = True
-
-NONE_CONTROLNET_LABEL = "NONE / Input Override"
 CONTROLNET_CACHE_FAMILY = "controlnet"
-CONTROLNET_CACHE_ROLE = "model"
+CONTROLNET_CACHE_ROLE = "controlnet_base"
 CONTROLNET_CACHE_POLICY = "lru_family_capacity"
-
-
-# -------------------------------------------------------------------------
-# Helpers
-# -------------------------------------------------------------------------
-
-
-def _get_cnet_name(path=None, name=None):
-    if path:
-        return os.path.splitext(os.path.basename(str(path)))[0]
-    if name:
-        return os.path.splitext(os.path.basename(str(name)))[0]
-    return "external"
-
-
-def _cleanup_controlnet_for_cache(control_net):
-    """Best-effort unload callback used by the shared cache on eviction."""
-
-    cleanup = getattr(control_net, "cleanup", None)
-    if callable(cleanup):
-        cleanup()
-
-
-def _load_controlnet_from_disk(controlnet_path, cnet_display):
-    if DEBUG:
-        print(f"[JLC-ControlNet] 💾 Loading ControlNet '{cnet_display}' from disk")
-
-    control_net = comfy.controlnet.load_controlnet(controlnet_path)
-
-    if control_net is None:
-        raise RuntimeError(f"❌ Invalid ControlNet model file: {controlnet_path}")
-
-    # Ensure the reuse safeguard has a predictable initial state.
-    try:
-        control_net._jlc_dirty = False
-    except Exception:
-        pass
-
-    return control_net
-
-
-def _resolve_controlnet_from_cache(control_net_name):
-    controlnet_path = folder_paths.get_full_path_or_raise(
-        "controlnet",
-        control_net_name,
-    )
-    cnet_display = _get_cnet_name(path=controlnet_path)
-    cache_key = make_controlnet_cache_key(controlnet_path)
-
-    control_net = get_or_load_model(
-        cache_key,
-        lambda: _load_controlnet_from_disk(controlnet_path, cnet_display),
-        family=CONTROLNET_CACHE_FAMILY,
-        model_path=controlnet_path,
-        role=CONTROLNET_CACHE_ROLE,
-        unload_fn=_cleanup_controlnet_for_cache,
-        policy=CONTROLNET_CACHE_POLICY,
-    )
-
-    # SELF-HEALING SAFEGUARD:
-    # The cached resident object is cleaned before reuse if a prior run marked
-    # it dirty. Per-conditioning/sampler-facing objects are still produced with
-    # `control_net.copy()` below, just like ComfyUI's native Apply ControlNet.
-    if getattr(control_net, "_jlc_dirty", False):
-        if DEBUG:
-            print(f"[JLC-ControlNet] 🧽 Cleaning cached ControlNet '{cnet_display}'")
-        cleanup = getattr(control_net, "cleanup", None)
-        if callable(cleanup):
-            cleanup()
-        control_net._jlc_dirty = False
-
-    if DEBUG:
-        capacity = get_controlnet_cache_capacity()
-        info = cache_info()
-        names = [
-            _get_cnet_name(path=entry.get("model_path"))
-            for entry in info.get("entries", [])
-            if entry.get("family") == CONTROLNET_CACHE_FAMILY
-        ]
-        print(f"[JLC-ControlNet] 🧠 Shared cache ({len(names)}/{capacity}): {names}")
-
-    return control_net, cnet_display
+CONTROLNET_NONE_LABEL = "NONE / Input Override"
 
 
 class JLC_ControlNetApplyAdvanced:
@@ -235,7 +121,7 @@ class JLC_ControlNetApplyAdvanced:
                 }),
 
                 "control_net_name": (
-                    [NONE_CONTROLNET_LABEL] + folder_paths.get_filename_list("controlnet"),
+                    [CONTROLNET_NONE_LABEL] + folder_paths.get_filename_list("controlnet"),
                     {
                         "tooltip": (
                             "Select ControlNet model.\n"
@@ -263,41 +149,35 @@ class JLC_ControlNetApplyAdvanced:
         control_net_name=None,
         extra_concat=None,
     ):
-        # HARD EXIT: do not resolve or load any ControlNet while idle.
+        # Hard bypass before any dropdown resolution or model loading.
         if (not enabled) or strength == 0:
             if DEBUG:
-                print(f"[JLC-ControlNet] 😴 Node idle (enabled={enabled})")
+                print(f"[JLC-ControlNet] Node idle (enabled={enabled}, strength={strength})")
             return (positive, negative, vae, control_net)
 
-        if control_net_name == NONE_CONTROLNET_LABEL:
+        if control_net_name == CONTROLNET_NONE_LABEL:
             control_net_name = None
 
         if control_net is None and control_net_name is None:
             if DEBUG:
-                print("[JLC-ControlNet] ⏭️ Skipped (no input, no model selected)")
+                print("[JLC-ControlNet] Skipped (no input ControlNet and no dropdown model selected)")
             return (positive, negative, vae, control_net)
-
-        if DEBUG:
-            print(f"[JLC-ControlNet] 🟢 Node triggered (enabled={enabled}, strength={strength})")
 
         if extra_concat is None:
             extra_concat = []
 
-        # ------------------------------------------------------------------
-        # Resolve ControlNet source
-        # ------------------------------------------------------------------
-
+        # Resolve ControlNet source. Upstream input always wins and is never
+        # registered into the shared cache.
         if control_net is not None:
-            cnet_display = _get_cnet_name(name=control_net_name)
             if DEBUG:
-                print(f"[JLC-ControlNet] 🔌 Using ControlNet '{cnet_display}' from input")
+                print("[JLC-ControlNet] Using ControlNet from input")
         else:
-            control_net, cnet_display = _resolve_controlnet_from_cache(control_net_name)
+            control_net = self._load_controlnet_from_shared_cache(control_net_name)
 
         # ------------------------------------------------------------------
-        # Core logic based on ComfyUI's native Apply ControlNet node
+        # Core logic based on ComfyUI's native ControlNetApplyAdvanced node.
+        # This builds native previous_controlnet chains; it does not compose.
         # ------------------------------------------------------------------
-
         control_hint = image.movedim(-1, 1)
         cnets = {}
 
@@ -312,6 +192,8 @@ class JLC_ControlNetApplyAdvanced:
                 if prev_cnet in cnets:
                     c_net = cnets[prev_cnet]
                 else:
+                    # The cached/control input object is treated as a raw base.
+                    # Conditioning state is applied only to this isolated copy.
                     c_net = (
                         control_net.copy()
                         .set_cond_hint(
@@ -331,11 +213,55 @@ class JLC_ControlNetApplyAdvanced:
 
             out.append(c)
 
-        # Mark the resident/base object dirty after use so the next cache reuse
-        # can call cleanup() before creating fresh sampler-facing copies.
-        try:
-            control_net._jlc_dirty = True
-        except Exception:
-            pass
-
         return (out[0], out[1], vae, control_net)
+
+    def _load_controlnet_from_shared_cache(self, control_net_name):
+        if control_net_name is None:
+            raise RuntimeError("No ControlNet provided or selected.")
+
+        controlnet_path = folder_paths.get_full_path_or_raise(
+            "controlnet",
+            control_net_name,
+        )
+        cache_key = make_controlnet_cache_key(controlnet_path)
+        display_name = _display_name(path=controlnet_path)
+
+        def loader():
+            print(f"[JLC-ControlNet] Loading ControlNet '{display_name}' from disk")
+            cnet = comfy.controlnet.load_controlnet(controlnet_path)
+            if cnet is None:
+                raise RuntimeError(f"Invalid ControlNet model file: {control_net_name}")
+
+            # Defensive state hygiene: a newly loaded cached base should not
+            # inherit accidental MultiGPU clones. Real MultiGPU support is not
+            # part of this node's cache/conditioning responsibility.
+            if hasattr(cnet, "multigpu_clones"):
+                cnet.multigpu_clones = {}
+            return cnet
+
+        control_net = get_or_load_model(
+            cache_key,
+            loader,
+            family=CONTROLNET_CACHE_FAMILY,
+            model_path=controlnet_path,
+            role=CONTROLNET_CACHE_ROLE,
+            policy=CONTROLNET_CACHE_POLICY,
+        )
+
+        if DEBUG:
+            capacity = get_family_capacity(CONTROLNET_CACHE_FAMILY)
+            resident = cache_keys(family=CONTROLNET_CACHE_FAMILY)
+            print(
+                f"[JLC-ControlNet] Shared cache family='{CONTROLNET_CACHE_FAMILY}' "
+                f"resident={len(resident)} capacity={capacity}"
+            )
+
+        return control_net
+
+
+def _display_name(path=None, name=None):
+    if path:
+        return os.path.splitext(os.path.basename(path))[0]
+    if name:
+        return os.path.splitext(os.path.basename(name))[0]
+    return "external"

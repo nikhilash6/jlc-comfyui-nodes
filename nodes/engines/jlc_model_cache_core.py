@@ -75,10 +75,11 @@ import threading
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Iterable, Optional
 
+from ...jlc_custom_nodes_versions import JLC_CONTROLNET_VERSION
 
 MANIFEST = {
     "name": "JLC Shared Model Residency Cache Core",
-    "version": "0.1.0",
+    "version": JLC_CONTROLNET_VERSION,
     "author": "J. L. Córdova",
     "description": (
         "Shared process-local cache/residency helper for heavyweight JLC "
@@ -148,7 +149,7 @@ _DEFAULT_MAX_LOADED_TOTAL = max(
     ),
 )
 
-# ControlNet default is intentionally around four resident base models.
+# ControlNet default is intentionally around 2 resident base models.
 _DEFAULT_CONTROLNET_CAPACITY = max(
     0,
     _env_first_int(
@@ -157,7 +158,7 @@ _DEFAULT_CONTROLNET_CAPACITY = max(
             "JLC_MODEL_CACHE_MAX_CONTROLNET",
             "JLC_CACHE_MAX_CONTROLNET",
         ),
-        4,
+        2,
     ),
 )
 

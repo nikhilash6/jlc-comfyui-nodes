@@ -1,31 +1,55 @@
 """
-JLC ControlNet Orchestrator
----------------------------
+JLC ControlNet Orchestrator Advanced
+------------------------------------
 
-Maintenance-rescue version for wired ControlNet inputs.
+Maintenance-rescue version for internal ControlNet loading.
 
 This node keeps the April-style non-recursive orchestration algorithm intact.
-It adds only current ComfyUI compatibility shims, MultiGPU state hygiene on
-isolated copies, and dynamic visible slot support.
+The shared JLC model cache is used only for resident base ControlNet objects
+loaded by dropdown name.  Per-slot execution still uses independent `.copy()`
+isolation exactly as before.
 
-No internal loading/cache is used here.  Cache integration belongs only to the
-Advanced/internal-loader orchestrator.
+No `copy.deepcopy()` and no real MultiGPU deep-clone support are introduced.
 """
 
 MANIFEST = {
-    "name": "JLC ControlNet Orchestrator",
+    "name": "JLC ControlNet Orchestrator Advanced",
     "version": (1, 1, 1),
     "author": "J. L. Córdova",
     "description": (
-        "Wired ControlNet orchestrator with non-recursive weighted fusion, "
-        "current ComfyUI compatibility shims, and dynamic visible slots."
+        "Internal-loader ControlNet orchestrator with shared JLC cache, "
+        "non-recursive weighted fusion, compatibility shims, and dynamic slots."
     ),
 }
 
 import torch
+import folder_paths
+import comfy.controlnet
+
+try:
+    from .engines.jlc_model_cache_core import (
+        get_controlnet_cache_capacity,
+        get_or_load_model,
+        make_controlnet_cache_key,
+    )
+except Exception:
+    from jlc_model_cache_core import (  # type: ignore
+        get_controlnet_cache_capacity,
+        get_or_load_model,
+        make_controlnet_cache_key,
+    )
 
 MAX_SLOTS = 10
 DEBUG = True
+DISABLED = "DISABLED"
+SHARE_PREVIOUS = "SHARE_PREVIOUS"
+
+
+def _default_cache_size():
+    try:
+        return max(0, int(get_controlnet_cache_capacity()))
+    except Exception:
+        return 2
 
 
 def _clear_multigpu_clone_state(controlnet):
@@ -39,6 +63,33 @@ def _safe_cnet_name(controlnet):
     if model is not None:
         return model.__class__.__name__
     return controlnet.__class__.__name__
+
+
+def _load_controlnet_with_shared_cache(control_net_name, cache_size=None):
+    controlnet_path = folder_paths.get_full_path_or_raise("controlnet", control_net_name)
+    key = make_controlnet_cache_key(controlnet_path)
+
+    def loader():
+        print(f"[JLC-ControlNet Cache] Loading ControlNet: {control_net_name}")
+        cnet = comfy.controlnet.load_controlnet(controlnet_path)
+        if cnet is None:
+            raise RuntimeError(f"Invalid ControlNet model file: {control_net_name}")
+        return cnet
+
+    max_loaded_for_family = None
+    if cache_size is not None:
+        max_loaded_for_family = max(0, int(cache_size))
+
+    return get_or_load_model(
+        key,
+        loader,
+        family="controlnet",
+        model_path=controlnet_path,
+        role="controlnet",
+        policy="lru_family_capacity",
+        max_loaded_for_family=max_loaded_for_family,
+        metadata={"control_net_name": control_net_name},
+    )
 
 
 class JLC_ComposedControlNet:
@@ -144,31 +195,41 @@ class JLC_ComposedControlNet:
                 cnet.cleanup()
 
 
-class JLC_ControlNetOrchestrator:
+class JLC_ControlNetOrchestratorAdvanced:
     FUNCTION = "orchestrate"
     CATEGORY = "conditioning/controlnet"
 
     @classmethod
     def INPUT_TYPES(cls):
+        controlnet_names = folder_paths.get_filename_list("controlnet")
+
         optional = {
             "slot_count": ("INT", {
                 "default": 3,
                 "min": 1,
                 "max": MAX_SLOTS,
                 "step": 1,
-                "tooltip": "Number of visible/active wired ControlNet slots. Backend ignores slots above this count.",
+                "tooltip": "Number of visible/active internal ControlNet slots. Backend ignores slots above this count.",
+            }),
+            "controlnet_cache_size": ("INT", {
+                "default": _default_cache_size(),
+                "min": 0,
+                "max": 10,
+                "step": 1,
+                "advanced": True,
+                "tooltip": "Shared JLC ControlNet cache capacity. 0 means evict/prevent resident cached ControlNets.",
             }),
         }
 
         for i in range(1, MAX_SLOTS + 1):
             idx = f"{i:02d}"
-            optional[f"control_net_{idx}"] = ("CONTROL_NET", {
-                "tooltip": "ControlNet for this slot. Empty slots after Slot 1 reuse the previous ControlNet if available."
+            choices = [DISABLED] + ([] if i == 1 else [SHARE_PREVIOUS]) + controlnet_names
+            optional[f"control_net_name_{idx}"] = (choices, {
+                "tooltip": "ControlNet model for this slot. SHARE_PREVIOUS reuses the last selected model."
             })
             optional[f"image_{idx}"] = ("IMAGE", {
                 "tooltip": "Control image for this slot."
             })
-            optional[f"enabled_{idx}"] = ("BOOLEAN", {"default": True})
             optional[f"strength_{idx}"] = ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.01})
             optional[f"start_{idx}"] = ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.001})
             optional[f"end_{idx}"] = ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.001})
@@ -193,38 +254,49 @@ class JLC_ControlNetOrchestrator:
 
     RETURN_TYPES = ("CONDITIONING", "CONDITIONING")
 
-    def orchestrate(self, positive, negative, vae, slot_count=3, alpha=1.0, **kwargs):
+    def orchestrate(self, positive, negative, vae, slot_count=3, controlnet_cache_size=None, alpha=1.0, **kwargs):
         slot_count = max(1, min(MAX_SLOTS, int(slot_count)))
+        cache_size = _default_cache_size() if controlnet_cache_size is None else int(controlnet_cache_size)
 
         resolved = []
-        current_cnet = None
+        current_base = None
+        current_name = None
 
         for i in range(1, slot_count + 1):
             idx = f"{i:02d}"
-            enabled = kwargs.get(f"enabled_{idx}", True)
-            cnet = kwargs.get(f"control_net_{idx}")
+            name = kwargs.get(f"control_net_name_{idx}", DISABLED)
             image = kwargs.get(f"image_{idx}")
             strength = kwargs.get(f"strength_{idx}", 1.0)
             start = kwargs.get(f"start_{idx}", 0.0)
             end = kwargs.get(f"end_{idx}", 1.0)
             weight = kwargs.get(f"weight_{idx}", 1.0)
 
-            incoming_cnet = cnet if cnet is not None else current_cnet
+            if name in (None, "", DISABLED):
+                continue
+
+            if name == SHARE_PREVIOUS:
+                if current_base is None:
+                    continue
+                base = current_base
+                resolved_name = current_name or SHARE_PREVIOUS
+            else:
+                base = _load_controlnet_with_shared_cache(name, cache_size=cache_size)
+                current_base = base
+                current_name = name
+                resolved_name = name
 
             if (
-                not enabled
-                or incoming_cnet is None
-                or image is None
+                image is None
                 or strength == 0
                 or weight == 0
                 or (end - start) <= 0
             ):
                 continue
 
-            current_cnet = incoming_cnet
             resolved.append({
                 "slot": i,
-                "base": current_cnet,
+                "name": resolved_name,
+                "base": base,
                 "image": image,
                 "strength": strength,
                 "start": start,
@@ -235,7 +307,7 @@ class JLC_ControlNetOrchestrator:
         if DEBUG:
             active = [str(item["slot"]) for item in resolved]
             inactive = [str(i) for i in range(1, slot_count + 1) if str(i) not in active]
-            print(f"[JLC-Orchestrator] Active: {', '.join(active) or 'none'} | Inactive: {', '.join(inactive) or 'none'}")
+            print(f"[JLC-Orchestrator-Advanced] Active: {', '.join(active) or 'none'} | Inactive: {', '.join(inactive) or 'none'}")
 
         if not resolved:
             return (positive, negative)
@@ -265,8 +337,8 @@ class JLC_ControlNetOrchestrator:
         final_weights = [w * (alpha ** i) for i, w in enumerate(weights)]
 
         if DEBUG:
-            names = [_safe_cnet_name(c) for c in prepared_cnets]
-            print(f"[JLC-Orchestrator] Composed slots={names} weights={final_weights} alpha={alpha}")
+            names = [item["name"] for item in resolved]
+            print(f"[JLC-Orchestrator-Advanced] Composed slots={names} weights={final_weights} alpha={alpha}")
 
         composed = JLC_ComposedControlNet(prepared_cnets, final_weights)
         return (self._inject_composed(positive, composed), self._inject_composed(negative, composed))
@@ -305,3 +377,12 @@ class JLC_ControlNetOrchestrator:
             d["control_apply_to_uncond"] = False
             out.append([t[0], d])
         return out
+    
+
+NODE_CLASS_MAPPINGS = {
+    "JLC_ControlNetOrchestratorAdvanced": JLC_ControlNetOrchestratorAdvanced,
+}
+
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "JLC_ControlNetOrchestratorAdvanced": "JLC ControlNet Orchestrator (Advanced)",
+}

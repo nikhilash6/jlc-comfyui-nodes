@@ -1,166 +1,217 @@
 """
 JLC ControlNet Composition
+--------------------------
 
-- JLC ComfyUI Nodes Collection
-  - This node is part of the **JLC Custom Nodes for ComfyUI**
-    collection developed by **J. L. Córdova**.
+Maintenance-rescue version.
 
-  - Repository
-    https://github.com/Damkohler/jlc-comfyui-nodes
+This file intentionally preserves the April-style non-recursive composition
+algorithm.  The changes here are compatibility/state-hygiene shims only:
 
-  - The JLC nodes focus on practical workflow improvements for
-    image generation pipelines, particularly:
-        • Flux-based workflows
-        • LoRA experimentation
-        • advanced inpainting / outpainting pipelines
-
-- Node Purpose
-    - The **JLC ControlNet Composition** node replaces ComfyUI’s
-      recursive ControlNet chaining with an explicit, non-recursive
-      parallel composition model.
-
-    - Instead of linked execution via `previous_controlnet`, this node:
-            • Extracts the full ControlNet chain
-            • Detaches it safely (no mutation of originals)
-            • Evaluates each ControlNet independently
-            • Combines outputs using weighted additive fusion
-
-    - Composition is defined as:
-            combined = Σ (w_i · α^i) · C_i(x)
-
-      where:
-            • w_i = user-defined weights (can be negative for experimentation)
-            • α = order bias controlling dominance across ControlNets
-
-    - This approach:
-            • Eliminates recursive traversal overhead
-            • Reduces memory pressure and improves scaling
-            • Enables precise control over multi-ControlNet interactions
-            • Preserves compatibility with ComfyUI conditioning pipelines
-
-    - The node is particularly effective in:
-            • multi-ControlNet workflows (3+ CNs)
-            • high-resolution or tiled pipelines
-            • LoRA + ControlNet combined setups
-
-- Release Notes (v1.2.2)
-    - Uses the shared JLC ControlNet composition core so this node and the
-      Advanced Orchestrator cannot drift apart.
-    - Adds a conservative dynamic weight-count widget for frontend visibility.
-    - Predeclares ten weight widgets but defaults to the prior five-weight
-      behavior for backwards compatibility.
-    - `slot_count` is authoritative for how many chain entries / weights are
-      considered by the backend; hidden higher weights remain serialized but
-      are ignored.
-    - Core non-recursive fusion math is unchanged.
-
-- Performance Notes
-    - Reduces recursive ControlNet traversal overhead.
-    - Typically improves runtime and stability in multi-ControlNet workflows.
-    - Performance gains scale with number of ControlNets (N ≥ 2).
-
-- Attribution & License
-  - Concept and implementation by **J. L. Córdova**
-    with development assistance from **ChatGPT (OpenAI)**.
-
-  - Inspired by the ControlNet execution model in:
-    https://github.com/comfyanonymous/ComfyUI
-
-  - Copyright (c) 2026 J. L. Córdova
-
-  - Released under the MIT License.
+- keep the sampler-facing object as one ControlNet-like wrapper;
+- expose an empty ``multigpu_clones`` mapping for current ComfyUI;
+- provide lightweight current-interface helpers;
+- clear inherited MultiGPU clone bookkeeping from detached shallow copies;
+- keep chain detachment shallow via ``copy.copy``;
+- do not use ``copy.deepcopy`` or real MultiGPU deep-cloning.
 """
-
-from ..jlc_custom_nodes_versions import JLC_CONTROLNET_VERSION
 
 MANIFEST = {
     "name": "JLC ControlNet Composition",
-    "version": JLC_CONTROLNET_VERSION,
+    "version": (1, 1, 1),
     "author": "J. L. Córdova",
     "description": (
-        "Non-recursive ControlNet composition using explicit weighted fusion. "
-        "Provides deterministic, order-invariant behavior when alpha=1, with "
-        "correct native passthrough for single-ControlNet cases. Uses the "
-        "shared JLC ControlNet composition core so this node and the Advanced "
-        "Orchestrator cannot drift apart. Adds dynamic visibility for up to ten "
-        "weight slots while preserving the prior five-weight default. Fusion "
-        "math is unchanged."
+        "Non-recursive ControlNet composition with current ComfyUI compatibility "
+        "shims and dynamic visible weight rows."
     ),
 }
 
-try:
-    from .jlc_controlnet_composition_core import (
-        JLC_ComposedControlNet,
-        extract_controlnet_chain,
-        make_detached_chain,
-    )
-except ImportError:  # Supports direct loose-module imports during local testing.
-    from jlc_controlnet_composition_core import (  # type: ignore
-        JLC_ComposedControlNet,
-        extract_controlnet_chain,
-        make_detached_chain,
-    )
+import copy
+import torch
 
-
-MAX_COMPOSITION_WEIGHTS = 10
-DEFAULT_VISIBLE_WEIGHTS = 5
+MAX_SLOTS = 10
+DEBUG = True
 
 
 # ------------------------------------------------------------
-# 🧠 Shared composition core
+# Small compatibility helpers
 # ------------------------------------------------------------
-# JLC_ComposedControlNet, extract_controlnet_chain, and make_detached_chain are
-# imported from jlc_controlnet_composition_core.py. The non-recursive fusion
-# algorithm is intentionally centralized there without changing its math.
+def _clear_multigpu_clone_state(controlnet):
+    """
+    Modern ComfyUI ControlNet objects carry a multigpu_clones dict.
+
+    JLC composition intentionally runs as a single sampler-facing wrapper with
+    detached shallow child ControlNets.  A detached child should not inherit any
+    alternate-device clone registry from the original object.
+    """
+    if hasattr(controlnet, "multigpu_clones"):
+        controlnet.multigpu_clones = {}
+    return controlnet
 
 
-def normalize_slot_count(slot_count, *, default=DEFAULT_VISIBLE_WEIGHTS, max_slots=MAX_COMPOSITION_WEIGHTS):
-    """Clamp dynamic weight-slot count while preserving old five-weight default."""
-    try:
-        count = int(slot_count)
-    except (TypeError, ValueError):
-        count = int(default)
-
-    return max(1, min(int(max_slots), count))
-
-
-def slot_count_widget():
-    return (
-        "INT",
-        {
-            "default": DEFAULT_VISIBLE_WEIGHTS,
-            "min": 1,
-            "max": MAX_COMPOSITION_WEIGHTS,
-            "step": 1,
-            "display": "number",
-            "tooltip": (
-                "Authoritative number of ControlNet weights to expose and use. "
-                "Weights above this value remain serialized but are ignored. "
-                "Default 5 preserves the original Composition node behavior."
-            ),
-        },
-    )
-
-
-def weight_widget(index):
-    return (
-        "FLOAT",
-        {
-            "default": 1.0,
-            "min": -10.0,
-            "max": 10.0,
-            "step": 0.01,
-            "tooltip": f"Contribution of ControlNet {index} (can be negative)",
-        },
-    )
-
-
-def build_weight_widgets(max_slots=MAX_COMPOSITION_WEIGHTS):
-    return {f"weight_{i}": weight_widget(i) for i in range(1, int(max_slots) + 1)}
+def _safe_cnet_name(controlnet):
+    model = getattr(controlnet, "control_model", None)
+    if model is not None:
+        return model.__class__.__name__
+    return controlnet.__class__.__name__
 
 
 # ------------------------------------------------------------
-# 🎯 Main Node
+# Wrapper: behaves like ONE ControlNet to the sampler
+# ------------------------------------------------------------
+class JLC_ComposedControlNet:
+    def __init__(self, controlnets, weights):
+        self.controlnets = controlnets
+        self.weights = weights
+        self.previous_controlnet = None
+        self.extra_hooks = None
+
+        # Current ComfyUI compatibility: ControlNet-like objects are expected
+        # to expose a MultiGPU clone registry.  Empty dict means explicit
+        # single-GPU/no-clone behavior for this wrapper.
+        self.multigpu_clones = {}
+
+    # ---------------------------------------------------------------------
+    # Core April-style algorithm: evaluate detached ControlNets independently
+    # and fuse their outputs by weighted additive streaming accumulation.
+    # ---------------------------------------------------------------------
+    def get_control(self, x_noisy, t, cond, batched_number, transformer_options):
+        combined = None
+
+        for cnet, w in zip(self.controlnets, self.weights):
+            if cnet is None or w == 0:
+                continue
+
+            out = cnet.get_control(x_noisy, t, cond, batched_number, transformer_options)
+            if out is None:
+                continue
+
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+
+            if combined is None:
+                combined = {}
+
+                for key, out_list in out.items():
+                    new_list = [None] * len(out_list)
+
+                    for i, v in enumerate(out_list):
+                        if v is None:
+                            continue
+
+                        owned = v.clone()
+                        if w != 1.0:
+                            owned.mul_(w)
+                        new_list[i] = owned
+
+                    combined[key] = new_list
+
+            else:
+                for key, out_list in out.items():
+                    if key not in combined:
+                        combined[key] = [None] * len(out_list)
+
+                    combined_list = combined[key]
+                    if len(combined_list) < len(out_list):
+                        combined_list.extend([None] * (len(out_list) - len(combined_list)))
+
+                    for i, v in enumerate(out_list):
+                        if v is None:
+                            continue
+
+                        dst = combined_list[i]
+                        if dst is None:
+                            owned = v.clone()
+                            if w != 1.0:
+                                owned.mul_(w)
+                            combined_list[i] = owned
+                        else:
+                            dst.add_(v, alpha=w)
+
+                    del out_list
+
+            del out
+
+        return combined
+
+    # --------------------------------------------------
+    # ControlNet-like compatibility surface
+    # --------------------------------------------------
+    def get_extra_hooks(self):
+        hooks = []
+        for cnet in self.controlnets:
+            if hasattr(cnet, "get_extra_hooks"):
+                hooks += cnet.get_extra_hooks()
+        return hooks
+
+    def get_models(self):
+        models = []
+        for cnet in self.controlnets:
+            if hasattr(cnet, "get_models"):
+                models += cnet.get_models()
+        return models
+
+    def get_models_only_self(self):
+        return self.get_models()
+
+    def get_instance_for_device(self, device):
+        return self
+
+    def inference_memory_requirements(self, dtype):
+        max_req = 0
+        for cnet in self.controlnets:
+            if cnet is None:
+                continue
+            if hasattr(cnet, "inference_memory_requirements"):
+                req = cnet.inference_memory_requirements(dtype)
+                if req is not None:
+                    max_req = max(max_req, req)
+        return max_req
+
+    def pre_run(self, model, percent_to_timestep_function):
+        for cnet in self.controlnets:
+            if hasattr(cnet, "pre_run"):
+                cnet.pre_run(model, percent_to_timestep_function)
+
+    def cleanup(self):
+        for cnet in self.controlnets:
+            if hasattr(cnet, "cleanup"):
+                cnet.cleanup()
+
+
+# ------------------------------------------------------------
+# Extract full chain, oldest -> newest
+# ------------------------------------------------------------
+def extract_controlnet_chain(cnet):
+    chain = []
+    visited = set()
+
+    while cnet is not None and id(cnet) not in visited:
+        chain.append(cnet)
+        visited.add(id(cnet))
+        cnet = getattr(cnet, "previous_controlnet", None)
+
+    chain.reverse()
+    return chain
+
+
+# ------------------------------------------------------------
+# Detach chain without recursive/deep copying
+# ------------------------------------------------------------
+def make_detached_chain(chain):
+    detached = []
+
+    for cnet in chain:
+        c_copy = copy.copy(cnet)
+        if hasattr(c_copy, "previous_controlnet"):
+            c_copy.previous_controlnet = None
+        _clear_multigpu_clone_state(c_copy)
+        detached.append(c_copy)
+
+    return detached
+
+
+# ------------------------------------------------------------
+# Main Node
 # ------------------------------------------------------------
 class JLC_ControlNetComposition:
     FUNCTION = "compose_controlnet"
@@ -168,60 +219,47 @@ class JLC_ControlNetComposition:
 
     @classmethod
     def INPUT_TYPES(cls):
+        optional = {
+            "slot_count": ("INT", {
+                "default": 5,
+                "min": 1,
+                "max": MAX_SLOTS,
+                "step": 1,
+                "tooltip": "Number of visible/active ControlNet weight rows. Backend ignores weights above this count.",
+            }),
+        }
+
+        for i in range(1, MAX_SLOTS + 1):
+            idx = f"{i:02d}"
+            optional[f"weight_{idx}"] = ("FLOAT", {
+                "default": 1.0,
+                "min": -10.0,
+                "max": 10.0,
+                "step": 0.01,
+                "tooltip": f"Contribution of ControlNet {i} in extracted chain; can be negative.",
+            })
+
+        optional["alpha"] = ("FLOAT", {
+            "default": 1.0,
+            "min": 0.01,
+            "max": 2.0,
+            "step": 0.01,
+            "tooltip": "Order bias. <1 favors earlier ControlNets, >1 favors later ones.",
+        })
+
         return {
             "required": {
                 "positive": ("CONDITIONING",),
                 "negative": ("CONDITIONING",),
             },
-            "optional": {
-                "slot_count": slot_count_widget(),
-                **build_weight_widgets(MAX_COMPOSITION_WEIGHTS),
-                "alpha": (
-                    "FLOAT",
-                    {
-                        "default": 1.0,
-                        "min": 0.01,
-                        "max": 2.0,
-                        "step": 0.01,
-                        "tooltip": "Order bias. <1 favors earlier ControlNets, >1 favors later ones",
-                    },
-                ),
-            },
+            "optional": optional,
         }
 
     RETURN_TYPES = ("CONDITIONING", "CONDITIONING")
 
-    def compose_controlnet(
-        self,
-        positive,
-        negative,
-        slot_count=DEFAULT_VISIBLE_WEIGHTS,
-        weight_1=1.0,
-        weight_2=1.0,
-        weight_3=1.0,
-        weight_4=1.0,
-        weight_5=1.0,
-        weight_6=1.0,
-        weight_7=1.0,
-        weight_8=1.0,
-        weight_9=1.0,
-        weight_10=1.0,
-        alpha=1.0,
-    ):
-        count = normalize_slot_count(slot_count)
-        all_weights = [
-            weight_1,
-            weight_2,
-            weight_3,
-            weight_4,
-            weight_5,
-            weight_6,
-            weight_7,
-            weight_8,
-            weight_9,
-            weight_10,
-        ]
-        weights = all_weights[:count]
+    def compose_controlnet(self, positive, negative, slot_count=5, alpha=1.0, **kwargs):
+        slot_count = max(1, min(MAX_SLOTS, int(slot_count)))
+        weights = [kwargs.get(f"weight_{i:02d}", 1.0) for i in range(1, slot_count + 1)]
 
         def process_conditioning(conditioning):
             out = []
@@ -234,70 +272,30 @@ class JLC_ControlNetComposition:
                     out.append([t[0], d])
                     continue
 
-                # 🔍 Extract full chain
                 chain = extract_controlnet_chain(cnet)
 
-                # ✂️ Break recursion
+                # Single-ControlNet path: leave native chain behavior untouched.
+                if len(chain) <= 1:
+                    out.append([t[0], d])
+                    continue
+
                 detached_chain = make_detached_chain(chain)
+                trimmed_chain = detached_chain[:slot_count]
 
-                # 🎚️ Trim / match weights
-                trimmed_chain = detached_chain[:len(weights)]
-
-                if not trimmed_chain:
+                if len(trimmed_chain) <= 1:
                     out.append([t[0], d])
                     continue
 
-                # 🧹 Early filtering (matches JLC ControlNet Orchestrator discipline)
-                prepared = []
-                prepared_weights = []
+                trimmed_weights = weights[:len(trimmed_chain)]
+                final_weights = [w * (alpha ** i) for i, w in enumerate(trimmed_weights)]
 
-                for c, w in zip(trimmed_chain, weights[:len(trimmed_chain)]):
-                    if c is None:
-                        continue
-                    if w == 0:
-                        continue
-                    prepared.append(c)
-                    prepared_weights.append(w)
+                if DEBUG:
+                    names = [_safe_cnet_name(c) for c in trimmed_chain]
+                    print(f"[JLC-ControlNet] Composition chain={names} weights={final_weights} alpha={alpha}")
 
-                # 🔸 Pure passthrough (Edge and aberrant cases, like all weights = 0)
-                if not prepared:
-                    out.append([t[0], d])
-                    continue
-
-                # 🟢 Single-ControlNet fallback
-                if len(prepared) == 1:
-                    d["control"] = prepared[0]
-                    out.append([t[0], d])
-                    continue
-
-                # 🎯 Apply alpha AFTER filtering
-                final_weights = [
-                    w * (alpha ** i)
-                    for i, w in enumerate(prepared_weights)
-                ]
-
-                print(f"[JLC-ControlNet] ⚙️ weights={final_weights} alpha={alpha}")
-
-                # 🧩 Compose only when N ≥ 2
-                d["control"] = JLC_ComposedControlNet(
-                    prepared,
-                    final_weights,
-                )
-
+                d["control"] = JLC_ComposedControlNet(trimmed_chain, final_weights)
                 out.append([t[0], d])
 
             return out
 
-        new_positive = process_conditioning(positive)
-        new_negative = process_conditioning(negative)
-
-        return (new_positive, new_negative)
-
-
-NODE_CLASS_MAPPINGS = {
-    "JLC_ControlNetComposition": JLC_ControlNetComposition,
-}
-
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "JLC_ControlNetComposition": "⚙️ JLC ControlNet Composition",
-}
+        return (process_conditioning(positive), process_conditioning(negative))
