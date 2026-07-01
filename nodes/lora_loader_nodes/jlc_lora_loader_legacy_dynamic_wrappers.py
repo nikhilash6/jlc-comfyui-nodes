@@ -76,17 +76,6 @@ from .jlc_lora_dynamic_core import (
 )
 
 
-MANIFEST = {
-    "name": "JLC LoRA Loader Minimal Legacy Dynamic Wrappers",
-    "version": (1, 1, 0),
-    "author": "J. L. Córdova",
-    "description": (
-        "Minimal compatibility wrappers for only the fixed 10-stack and fixed "
-        "2-LoRA block-weight legacy MODEL+CLIP loader class_type names. "
-        "Delegates behavior to jlc_lora_dynamic_core.py."
-    ),
-}
-
 # -----------------------------------------------------------------------------
 # Deprecation Tooltip Definition
 # -----------------------------------------------------------------------------

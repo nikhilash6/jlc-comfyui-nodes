@@ -59,9 +59,11 @@ from PIL import ImageFilter
 import numpy as np
 import torch
 
+from ..jlc_custom_nodes_versions import JLC_PADDED_NODES_VERSION
+
 MANIFEST = {
     "name": "JLC Padded Image (Inpaint / Outpaint Canvas Builder)",
-    "version": (1, 0, 1),
+    "version": JLC_PADDED_NODES_VERSION,
     "author": "J. L. Córdova",
     "description": (
         "Creates a padded canvas and aligned mask for inpainting and "

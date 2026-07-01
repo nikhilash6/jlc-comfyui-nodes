@@ -1,4 +1,72 @@
-# jlc_controlnet_aux_preproc_lists.py
+"""
+JLC ControlNet Aux Preprocessor Lists
+-------------------------------------
+
+- JLC ComfyUI Nodes Collection
+  - This helper module is part of the **JLC Custom Nodes for ComfyUI**
+    collection developed by **J. L. Córdova**.
+
+  - Repository:
+    https://github.com/Damkohler/jlc-comfyui-nodes
+
+- Helper Purpose
+    Curated include/exclude policy for the **JLC Dynamic Aux Preprocessor
+    Wrapper**.
+
+    The dynamic wrapper sits on top of **Fannovel16's comfyui_controlnet_aux**
+    package, but intentionally exposes only preprocessors that fit a simple
+    shared-widget model:
+
+        • IMAGE input
+        • optional/shared resolution input
+        • IMAGE-only output
+
+    Preprocessors that require thresholds, detector toggles, model selectors,
+    pose/keypoint outputs, masks, custom payloads, or other special behavior
+    should be excluded from this wrapper and used through their native
+    ControlNet Auxiliary nodes instead.
+
+- Policy Design
+    • The blacklist catches known non-simple or special-output families.
+    • The whitelist provides preferred ordering and compatibility fallback.
+    • Autodiscovery may include installed upstream preprocessors that pass the
+      wrapper's strict structural gate.
+    • The list is not a claim of ownership over upstream preprocessors.
+
+- Versioning
+    Version is governed by `JLC_CONTROLNET_AUX_VERSION` from
+    `jlc_custom_nodes_versions.py`.
+
+- Attribution & License
+  - JLC curation policy by **J. L. Córdova**
+    with development assistance from **ChatGPT (OpenAI)**.
+
+  - Built for use with:
+    https://github.com/Fannovel16/comfyui_controlnet_aux
+
+  - Designed for use with:
+    https://github.com/comfyanonymous/ComfyUI
+
+  - Copyright (c) 2026 J. L. Córdova
+
+  - Released under the **MIT License**.
+"""
+
+from ...jlc_custom_nodes_versions import JLC_CONTROLNET_AUX_VERSION
+
+MANIFEST = {
+    "name": "JLC ControlNet Aux Preprocessor Lists",
+    "version": JLC_CONTROLNET_AUX_VERSION,
+    "author": "J. L. Córdova",
+    "description": (
+        "Curated include/exclude policy for the JLC Dynamic Aux Preprocessor "
+        "Wrapper. Defines blacklist, preferred whitelist/order, and autodiscovery "
+        "behavior for simple Fannovel16 comfyui_controlnet_aux preprocessors that "
+        "fit the wrapper's IMAGE input, optional/shared resolution, and IMAGE-only "
+        "output model."
+    ),
+}
+
 
 """
 Curated include/exclude policy for the JLC Aux Preprocessor Wrapper.

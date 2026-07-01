@@ -1,7 +1,7 @@
 [project]
 name = "jlc-comfyui-nodes"
-version = "1.3.0"
-"description" = "A collection of workflow-focused ComfyUI nodes for structured, deterministic image generation pipelines. Introduces the JLC ControlNet Orchestrator (Base & Advanced), a non-canonical execution model that replaces recursive ControlNet chaining with slot-based independent evaluation and deterministic weighted fusion, ensuring order-invariant behavior (alpha=1), copy-based isolation, early bypass of inactive slots, and native fallback for single-ControlNet cases. The Advanced variant integrates built-in ControlNet loading and persistent caching, eliminating external loader and Apply nodes while preserving correctness. Also includes JLC ControlNet Composition for parallel aggregation, JLC Padded Image and JLC Padded Latent for unified canvas and mask generation in inpainting/outpainting workflows, and additional utilities for scalable pipeline design."
+version = "1.5.0"
+description = "A ComfyUI custom-node collection focused primarily on ControlNet execution and composition improvements. Its centerpiece is the JLC non-recursive ControlNet family, including Composition and Orchestrator nodes that replace recursive multi-ControlNet chaining with isolated ControlNet evaluation and deterministic weighted fusion while preserving native single-ControlNet behavior. These nodes are intended for ControlNet-heavy Flux and diffusion workflows where recursive chaining can become difficult to reason about, slow, or memory-sensitive. The collection also includes practical workflow tools that support these pipelines, including graph-safe ControlNet Apply variants, shared-cache ControlNet loading, dynamic ControlNet Aux preprocessing, padded image/latent helpers for inpainting and outpainting, dynamic LoRA loaders, seed utilities, and stage-boundary VRAM cleanup helpers."
 authors = [
     { name = "J. L. Córdova", email = "jose.l.cordova@gmail.com" }
 ]

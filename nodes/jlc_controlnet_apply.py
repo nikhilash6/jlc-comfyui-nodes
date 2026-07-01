@@ -1,5 +1,6 @@
 """
 JLC ControlNet Apply
+--------------------
 
 - JLC ComfyUI Nodes Collection
   - This node is part of the **JLC Custom Nodes for ComfyUI**
@@ -13,56 +14,55 @@ JLC ControlNet Apply
         • Flux-based workflows
         • LoRA experimentation
         • advanced inpainting / outpainting pipelines
-
+        • multi-ControlNet composition and orchestration
 
 - Node Purpose
-  - The **JLC ControlNet Apply** node applies a ControlNet to both
-    positive and negative conditioning streams within a ComfyUI
-    workflow.
+  - The **JLC ControlNet Apply** node applies one ControlNet to both
+    positive and negative conditioning streams while preserving native
+    ComfyUI ControlNet chaining semantics.
 
-  - The node is designed to support **daisy-chained ControlNet
-    pipelines**, allowing multiple ControlNet nodes to be applied
-    sequentially without unnecessary model reloads.
+  - This node is intentionally simple and native-facing:
+        • the hint image is a required input and is validated by ComfyUI;
+        • the incoming ControlNet is copied before conditioning state is applied;
+        • previously attached ControlNets are preserved through
+          `set_previous_controlnet(prev_cnet)`;
+        • disabled or zero-strength operation is a pass-through.
 
-  - When enabled, the node attaches a ControlNet instance to each
-    conditioning block while preserving previously attached
-    ControlNet stacks.
+  - In the larger JLC non-recursive ControlNet workflow, this node is useful
+    as a conventional chain-building stage.  A downstream Composition node
+    may later extract the native chain, detach it, and replace recursive
+    evaluation with weighted non-recursive fusion.
 
-  - When disabled (or when strength is set to zero), the node
-    behaves as a **pass-through**, forwarding conditioning,
-    ControlNet, and VAE inputs unchanged. This allows the node
-    to be toggled on/off without breaking the surrounding graph.
-    This is necessary because bypassing the node breaks the network
-    and reroutes the positive clip to both positive and negative inputs
-    of the downstream node.
-
+  - The node also passes the ControlNet and VAE forward so that chained
+    workflows remain tidy and do not require repeated loader wiring.
 
 - Attribution & License
   - Concept and implementation by **J. L. Córdova**
     with development assistance from **ChatGPT (OpenAI)**.
 
-  - This node is adapted from the **ControlNetApply** node
-    included in the core **ComfyUI** project.
-
-    ComfyUI repository:
+  - Adapted from the **ControlNetApply** node in the core **ComfyUI**
+    project:
     https://github.com/comfyanonymous/ComfyUI
 
   - Copyright (c) 2026 J. L. Córdova
 
   - Released under the **MIT License**.
-    This permits use, modification, and redistribution of the
-    software provided that the copyright notice and license
-    information are retained.
 """
 
-import torch
+from ..jlc_custom_nodes_versions import JLC_CONTROLNET_VERSION
 
 MANIFEST = {
     "name": "JLC ControlNet Apply",
-    "version": (1, 0, 1),
+    "version": JLC_CONTROLNET_VERSION,
     "author": "J. L. Córdova",
-    "description": "A simple mod to core ComfyUI node to minimize model reloads in multiple ControlNet workflows.",
+    "description": (
+        "Native-style ControlNet apply node for chained workflows. Applies one "
+        "ControlNet to positive and negative conditioning, preserves existing "
+        "previous_controlnet chains, supports pass-through disabling, and passes "
+        "ControlNet/VAE objects forward for tidy multi-node pipelines."
+    ),
 }
+
 
 class JLC_ControlNetApply:
     FUNCTION = "apply_controlnet"
@@ -84,7 +84,6 @@ class JLC_ControlNetApply:
             }
         }
 
-    # CONTROL_NET and VAE pass thru:
     RETURN_TYPES = ("CONDITIONING", "CONDITIONING", "CONTROL_NET", "VAE")
     RETURN_NAMES = ("positive", "negative", "control_net", "vae")
 
@@ -139,7 +138,6 @@ class JLC_ControlNetApply:
 
             out.append(c)
 
-        # CONTROL_NET and VAE can link forward to the next call.
         return (out[0], out[1], control_net, vae)
 
 

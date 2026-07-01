@@ -57,10 +57,11 @@ JLC Padded Latent (Inpaint/Outpaint)
 import torch
 import node_helpers
 from .jlc_padded_image import JLC_PaddedImage
+from ..jlc_custom_nodes_versions import JLC_PADDED_NODES_VERSION
 
 MANIFEST = {
     "name": "JLC Padded Latent (Inpaint/Outpaint)",
-    "version": (1, 0, 1),
+    "version": JLC_PADDED_NODES_VERSION,
     "author": "J. L. Córdova",
     "description": (
         "Combines JLC Padded Image with inpaint conditioning. "

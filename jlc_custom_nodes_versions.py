@@ -1,13 +1,32 @@
 # jlc_custom_nodes_versions.py
 
+"""
+JLC Custom Nodes Version Registry
+---------------------------------
+
+Central version registry for the JLC ComfyUI Nodes collection.
+
+For this release, active node families are intentionally kept on a unified
+release version to avoid stale per-file manifest drift. Helper/core modules
+also use the shared release version unless a future API-specific version split
+is needed.
+
+Released under the MIT License as part of the JLC ComfyUI Nodes Collection.
+"""
+
 # from ...jlc_custom_nodes_versions import JLC_LORA_LOADER_VERSION
 
-JLC_CONTROLNET_VERSION = "1.2.0"
-JLC_CONTROLNET_HELPERS_VERSION = "1.0.0"
+JLC_CUSTOM_NODES_VERSION = "1.5.0"
 
-JLC_LORA_LOADER_VERSION = "1.2.5"
-JLC_LORA_HELPERS_VERSION = "1.0.0"
+# Active node-family versions
+JLC_CONTROLNET_VERSION = JLC_CUSTOM_NODES_VERSION
+JLC_CONTROLNET_AUX_VERSION = JLC_CUSTOM_NODES_VERSION
+JLC_LORA_LOADER_VERSION = JLC_CUSTOM_NODES_VERSION
+JLC_PADDED_NODES_VERSION = JLC_CUSTOM_NODES_VERSION
+JLC_UTIL_NODES_VERSION = JLC_CUSTOM_NODES_VERSION
 
-JLC_CONTROLNET_AUX_VERSION = "1.0.0"
-
-JLC_UTIL_NODES_VERSION = "0.1.0"
+# Shared helper / engine versions
+JLC_CONTROLNET_HELPERS_VERSION = JLC_CUSTOM_NODES_VERSION
+JLC_LORA_HELPERS_VERSION = JLC_CUSTOM_NODES_VERSION
+JLC_ENGINE_HELPERS_VERSION = JLC_CUSTOM_NODES_VERSION
+JLC_MODEL_CACHE_CORE_VERSION = JLC_CUSTOM_NODES_VERSION

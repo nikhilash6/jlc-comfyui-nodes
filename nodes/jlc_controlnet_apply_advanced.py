@@ -1,65 +1,88 @@
 """
 JLC ControlNet Apply (Advanced)
+-------------------------------
 
 - JLC ComfyUI Nodes Collection
   - This node is part of the **JLC Custom Nodes for ComfyUI**
     collection developed by **J. L. Córdova**.
 
-- Node Purpose
-    - Applies a ControlNet to both positive and negative conditioning streams.
-    - Supports optional upstream CONTROL_NET input or internal dropdown loading.
-    - Uses the shared JLC model residency cache for internally loaded ControlNet
-      base objects only.
+  - Repository
+    https://github.com/Damkohler/jlc-comfyui-nodes
 
-- Safety / Architecture Notes
-    - The shared cache owns only resident base ControlNet objects.
-    - Conditioning is always applied to per-execution `.copy()` instances.
-    - The cached base object is never passed through `set_cond_hint()`.
-    - No `_jlc_dirty` marker is needed because cached residents remain raw bases.
-    - Native Comfy chain semantics are preserved via `set_previous_controlnet()`.
+  - The JLC nodes focus on practical workflow improvements for
+    image generation pipelines, particularly:
+        • Flux-based workflows
+        • LoRA experimentation
+        • advanced inpainting / outpainting pipelines
+        • multi-ControlNet composition and orchestration
+
+- Node Purpose
+  - The **JLC ControlNet Apply (Advanced)** node applies one ControlNet to
+    both positive and negative conditioning streams, with optional internal
+    ControlNet loading through the shared JLC model residency cache.
+
+  - The node supports two ControlNet sourcing modes:
+        • upstream `control_net` input for explicit wired reuse;
+        • internal dropdown loading through `control_net_name`.
+
+  - Source priority is deterministic:
+        1. if the upstream `control_net` input is connected, it is used;
+        2. otherwise the selected dropdown model is loaded or reused through
+           the shared JLC cache.
+
+  - The shared cache owns only raw resident base ControlNet objects.  Per-run
+    conditioning state is always applied to isolated `.copy()` instances, and
+    cached base objects are never passed through `set_cond_hint()`.
+
+  - Native ComfyUI chain semantics are preserved:
+        • the hint image is a required input and is validated by ComfyUI;
+        • previous ControlNets already attached to conditioning are preserved
+          through `set_previous_controlnet(prev_cnet)`;
+        • disabled or zero-strength operation exits before any dropdown model
+          is loaded;
+        • the node does not perform non-recursive fusion itself.
+
+  - In the larger JLC non-recursive ControlNet workflow, this node can build
+    ordinary ControlNet chains efficiently, while downstream Composition or
+    Orchestrator nodes may perform explicit non-recursive weighted fusion.
 
 - Attribution & License
   - Concept and implementation by **J. L. Córdova**
     with development assistance from **ChatGPT (OpenAI)**.
 
-  - Adapted from the **ControlNetApplyAdvanced** node in:
+  - Adapted from the **ControlNetApplyAdvanced** node in the core
+    **ComfyUI** project:
     https://github.com/comfyanonymous/ComfyUI
 
   - Copyright (c) 2026 J. L. Córdova
+
   - Released under the **MIT License**.
 """
 
-MANIFEST = {
-    "name": "JLC ControlNet Apply (Advanced)",
-    "version": (1, 1, 3),
-    "author": "J. L. Córdova",
-    "description": (
-        "ControlNet apply node with integrated dropdown loading through the "
-        "shared JLC model residency cache. Preserves native ControlNet chain "
-        "semantics and keeps cached objects as raw base residents."
-    ),
-}
 
 import os
 
 import folder_paths
 import comfy.controlnet
 
-try:
-    from .engines.jlc_model_cache_core import (
-        make_controlnet_cache_key,
-        get_or_load_model,
-        cache_keys,
-        get_family_capacity,
-    )
-except ImportError:
-    from jlc_model_cache_core import (  # type: ignore
-        make_controlnet_cache_key,
-        get_or_load_model,
-        cache_keys,
-        get_family_capacity,
-    )
+from ..jlc_custom_nodes_versions import JLC_CONTROLNET_VERSION
 
+from .engines.jlc_model_cache_core import (
+        get_or_load_model,
+        make_controlnet_cache_key,
+)
+
+MANIFEST = {
+    "name": "JLC ControlNet Apply (Advanced)",
+    "version": JLC_CONTROLNET_VERSION,
+    "author": "J. L. Córdova",
+    "description": (
+        "ControlNet apply node with optional internal dropdown loading through "
+        "the shared JLC model residency cache. Preserves native ControlNet chain "
+        "semantics, applies conditioning only to per-run copies, and avoids model "
+        "loading when disabled or strength is zero."
+    ),
+}
 
 DEBUG = True
 CONTROLNET_CACHE_FAMILY = "controlnet"
