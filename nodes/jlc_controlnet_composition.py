@@ -72,6 +72,9 @@ from ..jlc_custom_nodes_versions import JLC_CONTROLNET_VERSION
 
 from .jlc_controlnet_nonrecursive_core import (
         safe_cnet_name,
+        extract_controlnet_chain,
+        make_detached_chain,
+        JLC_ComposedControlNet,
 )
 
 
