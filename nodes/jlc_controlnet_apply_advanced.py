@@ -68,6 +68,7 @@ import comfy.controlnet
 from ..jlc_custom_nodes_versions import JLC_CONTROLNET_VERSION
 
 from .engines.jlc_model_cache_core import (
+        get_controlnet_cache_capacity,
         get_or_load_model,
         make_controlnet_cache_key,
 )
@@ -262,6 +263,8 @@ class JLC_ControlNetApplyAdvanced:
                 cnet.multigpu_clones = {}
             return cnet
 
+        capacity = max(0, int(get_controlnet_cache_capacity()))
+
         control_net = get_or_load_model(
             cache_key,
             loader,
@@ -269,14 +272,13 @@ class JLC_ControlNetApplyAdvanced:
             model_path=controlnet_path,
             role=CONTROLNET_CACHE_ROLE,
             policy=CONTROLNET_CACHE_POLICY,
+            max_loaded_for_family=capacity,
         )
 
         if DEBUG:
-            capacity = get_family_capacity(CONTROLNET_CACHE_FAMILY)
-            resident = cache_keys(family=CONTROLNET_CACHE_FAMILY)
             print(
                 f"[JLC-ControlNet] Shared cache family='{CONTROLNET_CACHE_FAMILY}' "
-                f"resident={len(resident)} capacity={capacity}"
+                f"capacity={capacity}"
             )
 
         return control_net
