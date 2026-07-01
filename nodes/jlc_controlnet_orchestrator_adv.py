@@ -2,76 +2,16 @@
 JLC ControlNet Orchestrator (Advanced)
 --------------------------------------
 
-- JLC ComfyUI Nodes Collection
-  - This node is part of the **JLC Custom Nodes for ComfyUI**
-    collection developed by **J. L. Córdova**.
+Internal-loader multi-ControlNet Orchestrator using the shared JLC model cache
+and the shared non-recursive composition core.
 
-  - Repository
-    https://github.com/Damkohler/jlc-comfyui-nodes
-
-  - The JLC nodes focus on practical workflow improvements for
-    image generation pipelines, particularly:
-        • Flux-based workflows
-        • LoRA experimentation
-        • advanced inpainting / outpainting pipelines
-        • multi-ControlNet composition and orchestration
-
-- Node Purpose
-  - The **JLC ControlNet Orchestrator (Advanced)** builds a non-recursive
-    multi-ControlNet composition from internal ControlNet dropdown slots and
-    per-slot hint images.
-
-  - This node combines the workflow tidiness of internal loading with the JLC
-    non-recursive ControlNet execution model:
-        • each visible slot may select a ControlNet by name;
-        • later slots may use `SHARE_PREVIOUS` to reuse the last selected model;
-        • disabled slots do not load models;
-        • active slots receive independent hint images, strengths, timestep
-          ranges, and weights;
-        • conditioned ControlNets are isolated per slot through `.copy()`;
-        • one active ControlNet uses native `set_previous_controlnet(prev_cnet)`;
-        • two or more active ControlNets use the shared JLC composed wrapper.
-
-  - Multi-ControlNet composition is defined as:
-        combined = Σ (w_i · α^i) · C_i(x)
-
-    where:
-        • C_i(x) is the independent output of active slot i;
-        • w_i is the user-defined slot weight;
-        • α is an order-bias term applied across active slots.
-
-  - Internal ControlNet loading is delegated to the shared JLC model residency
-    cache.  The cache owns raw base ControlNet objects only; hint conditioning
-    is applied exclusively to per-run copies.
-
-  - The node performs a lightweight preflight over visible slots before loading
-    ControlNet models whenever possible.  A slot that is effectively active
-    must have a hint image:
-        • selected model or valid `SHARE_PREVIOUS`;
-        • non-zero strength;
-        • non-zero weight;
-        • valid start/end range.
-
-    If such a slot has no image connected, the node raises a runtime error so
-    ComfyUI highlights the miswired Orchestrator instead of silently skipping
-    the slot.
-
-  - Hidden dynamic slots are ignored by the backend.  The declared `slot_count`
-    is authoritative for visible active-slot evaluation.
-
-- Attribution & License
-  - Concept and implementation by **J. L. Córdova**
-    with development assistance from **ChatGPT (OpenAI)**.
-
-  - Inspired by the ControlNet execution model in the core **ComfyUI**
-    project:
-    https://github.com/comfyanonymous/ComfyUI
-
-  - Copyright (c) 2026 J. L. Córdova
-
-  - Released under the **MIT License**.
+This pass keeps the April linearized composition math intact and only hardens
+interfaces with newer Comfy paths: shared core delegation, centralized per-slot
+copy/conditioning, strict preflight before model loading, and the existing
+single-GPU/no-real-MultiGPU shunt.
 """
 
+from __future__ import annotations
 
 import folder_paths
 import comfy.controlnet
@@ -79,15 +19,17 @@ import comfy.controlnet
 from ..jlc_custom_nodes_versions import JLC_CONTROLNET_VERSION
 
 from .jlc_controlnet_nonrecursive_core import (
-        clear_multigpu_clone_state,
-        compose_or_native_fallback,
-        safe_cnet_name,
+    DEBUG,
+    clear_multigpu_clone_state,
+    compose_or_native_fallback,
+    prepare_controlnet_copy,
+    safe_cnet_name,
 )
 
 from .engines.jlc_model_cache_core import (
-        get_controlnet_cache_capacity,
-        get_or_load_model,
-        make_controlnet_cache_key,
+    get_controlnet_cache_capacity,
+    get_or_load_model,
+    make_controlnet_cache_key,
 )
 
 MANIFEST = {
@@ -98,13 +40,13 @@ MANIFEST = {
         "Internal-loader multi-ControlNet orchestrator using the shared JLC "
         "model residency cache and JLC non-recursive weighted fusion. Supports "
         "dynamic slots, SHARE_PREVIOUS model reuse, strict missing-hint validation, "
-        "preflight before ControlNet loading where possible, native single-ControlNet "
-        "routing, and composed fusion for multi-ControlNet workflows."
+        "preflight before ControlNet loading, native single-ControlNet routing "
+        "when mathematically equivalent, and composed fusion for weighted or "
+        "multi-ControlNet workflows."
     ),
 }
 
 MAX_SLOTS = 10
-DEBUG = True
 DISABLED = "DISABLED"
 SHARE_PREVIOUS = "SHARE_PREVIOUS"
 
@@ -121,7 +63,8 @@ def _load_controlnet_with_shared_cache(control_net_name, cache_size=None):
     key = make_controlnet_cache_key(controlnet_path)
 
     def loader():
-        print(f"[JLC-ControlNet Cache] Loading ControlNet: {control_net_name}")
+        if DEBUG:
+            print(f"[JLC-ControlNet Cache] loading ControlNet: {control_net_name}")
         cnet = comfy.controlnet.load_controlnet(controlnet_path)
         if cnet is None:
             raise RuntimeError(f"Invalid ControlNet model file: {control_net_name}")
@@ -207,18 +150,8 @@ class JLC_ControlNetOrchestratorAdvanced:
         slot_count = max(1, min(MAX_SLOTS, int(slot_count)))
         cache_size = _default_cache_size() if controlnet_cache_size is None else int(controlnet_cache_size)
 
-        # ------------------------------------------------------------------
-        # Pass 1: pure slot preflight.
-        #
-        # Do not touch the shared cache and do not load ControlNet files here.
-        # This keeps bad graphs from paying the final internal ControlNet load
-        # before the missing-hint RuntimeError is raised. ComfyUI may still
-        # execute unrelated upstream dependencies before this node runs; this
-        # pass only controls this node's own internal loader/cache behavior.
-        #
-        # SHARE_PREVIOUS intentionally tracks the last selected model name, not
-        # the last active prepared slot, matching the previous behavior.
-        # ------------------------------------------------------------------
+        # Pass 1: pure slot preflight. Do not touch cache or load model files
+        # until all active slots have valid wiring.
         resolved_specs = []
         current_name = None
         inactive_reasons = {}
@@ -241,18 +174,17 @@ class JLC_ControlNetOrchestratorAdvanced:
                     inactive_reasons[i] = "share_previous_without_model"
                     continue
                 resolved_name = current_name
-                source = "SHARE_PREVIOUS"
+                source = SHARE_PREVIOUS
             else:
                 resolved_name = name
                 source = "selected"
+                # Intentional: SHARE_PREVIOUS tracks the last selected model name,
+                # even if this selected slot later becomes inactive due to strength,
+                # weight, range, or image preflight.
                 current_name = resolved_name
 
             has_valid_range = (end - start) > 0
-            has_meaningful_control = (
-                strength != 0
-                and weight != 0
-                and has_valid_range
-            )
+            has_meaningful_control = strength != 0 and weight != 0 and has_valid_range
 
             if not has_meaningful_control:
                 if strength == 0:
@@ -287,7 +219,8 @@ class JLC_ControlNetOrchestratorAdvanced:
             active = [str(item["slot"]) for item in resolved_specs]
             inactive = [str(i) for i in range(1, slot_count + 1) if str(i) not in active]
             reason_text = ", ".join(
-                f"{slot}:{inactive_reasons.get(slot, 'inactive')}" for slot in range(1, slot_count + 1)
+                f"{slot}:{inactive_reasons.get(slot, 'inactive')}"
+                for slot in range(1, slot_count + 1)
                 if str(slot) not in active
             )
             print(
@@ -299,10 +232,7 @@ class JLC_ControlNetOrchestratorAdvanced:
         if not resolved_specs:
             return (positive, negative)
 
-        # ------------------------------------------------------------------
-        # Pass 2: model/cache resolution after all active slots have passed
-        # missing-hint validation.
-        # ------------------------------------------------------------------
+        # Pass 2: model/cache resolution after preflight.
         resolved = []
         current_base = None
         current_base_name = None
@@ -323,17 +253,13 @@ class JLC_ControlNetOrchestratorAdvanced:
 
         for item in resolved:
             control_hint = item["image"].movedim(-1, 1)
-            cnet = (
-                item["base"]
-                .copy()
-                .set_cond_hint(
-                    control_hint,
-                    item["strength"],
-                    (item["start"], item["end"]),
-                    vae=vae,
-                )
+            cnet = prepare_controlnet_copy(
+                item["base"],
+                control_hint,
+                item["strength"],
+                (item["start"], item["end"]),
+                vae=vae,
             )
-            clear_multigpu_clone_state(cnet)
             prepared_cnets.append(cnet)
             weights.append(item["weight"])
 

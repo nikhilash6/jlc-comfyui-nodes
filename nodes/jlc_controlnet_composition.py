@@ -2,81 +2,29 @@
 JLC ControlNet Composition
 --------------------------
 
-- JLC ComfyUI Nodes Collection
-  - This node is part of the **JLC Custom Nodes for ComfyUI**
-    collection developed by **J. L. Córdova**.
+Converts an already-built native ComfyUI ControlNet chain into an explicit
+non-recursive weighted composition.
 
-  - Repository
-    https://github.com/Damkohler/jlc-comfyui-nodes
-
-  - The JLC nodes focus on practical workflow improvements for
-    image generation pipelines, particularly:
-        • Flux-based workflows
-        • LoRA experimentation
-        • advanced inpainting / outpainting pipelines
-        • multi-ControlNet composition and orchestration
-
-- Node Purpose
-  - The **JLC ControlNet Composition** node converts an already-built native
-    ComfyUI ControlNet chain into an explicit non-recursive weighted
-    composition.
-
-  - Instead of allowing recursive evaluation through `previous_controlnet`,
-    the node:
-        • extracts the full upstream ControlNet chain;
-        • preserves chain order from oldest to newest;
-        • shallow-copies each ControlNet with `copy.copy(...)`;
-        • detaches each copy by clearing `previous_controlnet`;
-        • presents one sampler-facing ControlNet-like wrapper;
-        • evaluates each detached ControlNet independently;
-        • combines outputs by weighted additive streaming accumulation.
-
-  - Composition is defined as:
-        combined = Σ (w_i · α^i) · C_i(x)
-
-    where:
-        • C_i(x) is the independent output of ControlNet i;
-        • w_i is the user-defined weight for that extracted chain position;
-        • α is an order-bias term applied across the chain.
-
-  - The single-ControlNet case intentionally remains native.  If the extracted
-    or visible chain contains only one active ControlNet, there is no recursive
-    multi-ControlNet traversal to remove, and the native path preserves the
-    speed and behavior found in testing.
-
-  - Because Composition receives completed conditioning rather than owning
-    hint-image sockets, it does not raise missing-image errors.  It can,
-    however, warn when visible non-zero weight rows do not correspond to an
-    extracted upstream ControlNet, or when an upstream chain is longer than the
-    visible `slot_count` and will be clipped.
-
-  - This node is most useful after conventional Apply nodes have built a
-    native ControlNet chain, especially in Flux or LoRA-heavy workflows where
-    recursive multi-ControlNet execution can create excessive overhead or
-    memory pressure.
-
-- Attribution & License
-  - Concept and implementation by **J. L. Córdova**
-    with development assistance from **ChatGPT (OpenAI)**.
-
-  - Inspired by the ControlNet execution model in the core **ComfyUI**
-    project:
-    https://github.com/comfyanonymous/ComfyUI
-
-  - Copyright (c) 2026 J. L. Córdova
-
-  - Released under the **MIT License**.
+This pass keeps the April non-recursive fusion algorithm intact and only hardens
+Comfy-facing behavior: imports are explicit, chain clipping is honored even when
+it leaves one child, non-unit single weights are honored through the composed
+wrapper, and identical conditioning rows share the same replacement wrapper so
+sampler batching is not defeated by needless object duplication.
 """
+
+from __future__ import annotations
+
+import math
 
 from ..jlc_custom_nodes_versions import JLC_CONTROLNET_VERSION
 
 from .jlc_controlnet_nonrecursive_core import (
-        safe_cnet_name,
-        extract_controlnet_chain,
-        make_detached_chain,
-        JLC_ComposedControlNet,
+    DEBUG,
+    JLC_ComposedControlNet,
+    extract_controlnet_chain,
+    make_detached_chain,
+    safe_cnet_name,
 )
-
 
 MANIFEST = {
     "name": "JLC ControlNet Composition",
@@ -85,15 +33,27 @@ MANIFEST = {
     "description": (
         "Converts an existing native ControlNet chain into a non-recursive "
         "weighted composition. Extracts and shallow-detaches upstream ControlNets, "
-        "uses a sampler-facing composed wrapper for multi-ControlNet fusion, "
-        "preserves native behavior for a single active ControlNet, and warns when "
+        "uses a sampler-facing composed wrapper for weighted fusion, preserves "
+        "native behavior only when mathematically equivalent, and warns when "
         "visible weight rows do not match the extracted chain."
     ),
 }
 
-
 MAX_SLOTS = 10
-DEBUG = True
+
+
+def _is_one(value: float) -> bool:
+    try:
+        return math.isclose(float(value), 1.0, rel_tol=0.0, abs_tol=1e-12)
+    except Exception:
+        return value == 1.0
+
+
+def _is_zero(value: float) -> bool:
+    try:
+        return math.isclose(float(value), 0.0, rel_tol=0.0, abs_tol=1e-12)
+    except Exception:
+        return value == 0
 
 
 class JLC_ControlNetComposition:
@@ -143,8 +103,9 @@ class JLC_ControlNetComposition:
     def compose_controlnet(self, positive, negative, slot_count=5, alpha=1.0, **kwargs):
         slot_count = max(1, min(MAX_SLOTS, int(slot_count)))
         weights = [kwargs.get(f"weight_{i:02d}", 1.0) for i in range(1, slot_count + 1)]
-        nonzero_visible_weight_rows = [i + 1 for i, w in enumerate(weights) if w != 0]
+        nonzero_visible_weight_rows = [i + 1 for i, w in enumerate(weights) if not _is_zero(w)]
         warned = set()
+        replacement_cache = {}
 
         if DEBUG:
             print(
@@ -166,8 +127,8 @@ class JLC_ControlNetComposition:
                         (
                             f"{stream_name}[{row_index}] has no upstream ControlNet, but "
                             f"visible non-zero weight rows are set: {nonzero_visible_weight_rows}. "
-                            "If this was not intentional, check upstream Apply/Orchestrator nodes, "
-                            "disabled toggles, strength=0, or missing hint image connections."
+                            "Check upstream Apply/Orchestrator nodes, disabled toggles, "
+                            "strength=0, or missing hint image connections."
                         ),
                     )
                 return
@@ -175,7 +136,7 @@ class JLC_ControlNetComposition:
             if chain_length < slot_count:
                 unused_nonzero = [
                     row for row in range(chain_length + 1, slot_count + 1)
-                    if weights[row - 1] != 0
+                    if not _is_zero(weights[row - 1])
                 ]
                 if unused_nonzero:
                     warn_once(
@@ -183,9 +144,7 @@ class JLC_ControlNetComposition:
                         (
                             f"slot_count={slot_count} but extracted chain has only "
                             f"{chain_length} ControlNet(s). Unused non-zero weight rows: "
-                            f"{unused_nonzero}. Extracted chain={chain_names}. If this was "
-                            "not intentional, check upstream Apply/Orchestrator nodes, disabled "
-                            "toggles, strength=0, or missing hint image connections."
+                            f"{unused_nonzero}. Extracted chain={chain_names}."
                         ),
                     )
 
@@ -200,6 +159,44 @@ class JLC_ControlNetComposition:
                     ),
                 )
 
+        def build_replacement(chain, chain_names):
+            trimmed_original = chain[:slot_count]
+            trimmed_weights = weights[:len(trimmed_original)]
+            final_weights = [w * (alpha ** i) for i, w in enumerate(trimmed_weights)]
+            trimmed_names = chain_names[:len(trimmed_original)]
+
+            # Key on original object identity, not detached copies, so matching
+            # positive/negative rows can share the same replacement wrapper.
+            cache_key = (
+                tuple(id(c) for c in trimmed_original),
+                tuple(final_weights),
+                alpha,
+                slot_count,
+            )
+            if cache_key in replacement_cache:
+                return replacement_cache[cache_key]
+
+            detached_chain = make_detached_chain(trimmed_original)
+
+            # If trimming and weighting leave exactly one child at weight 1.0,
+            # the mathematically equivalent fastest path is a detached native
+            # single ControlNet. This also correctly honors chain clipping.
+            if len(detached_chain) == 1 and _is_one(final_weights[0]):
+                replacement = detached_chain[0]
+                replacement_kind = "detached_native_single"
+            else:
+                replacement = JLC_ComposedControlNet(
+                    detached_chain,
+                    final_weights,
+                    debug_label="JLC-ControlNet Composition",
+                    debug_names=trimmed_names,
+                    debug_alpha=alpha,
+                )
+                replacement_kind = "composed"
+
+            replacement_cache[cache_key] = (replacement, replacement_kind, trimmed_names, trimmed_weights, final_weights)
+            return replacement_cache[cache_key]
+
         def process_conditioning(conditioning, stream_name):
             out = []
 
@@ -210,10 +207,7 @@ class JLC_ControlNetComposition:
                 if cnet is None:
                     warn_for_chain_length(0, stream_name, row_index, [])
                     if DEBUG:
-                        print(
-                            f"[JLC-ControlNet Composition] {stream_name}[{row_index}] "
-                            "fallback=no_control"
-                        )
+                        print(f"[JLC-ControlNet Composition] {stream_name}[{row_index}] fallback=no_control")
                     out.append([t[0], d])
                     continue
 
@@ -221,8 +215,14 @@ class JLC_ControlNetComposition:
                 chain_names = [safe_cnet_name(c) for c in chain]
                 warn_for_chain_length(len(chain), stream_name, row_index, chain_names)
 
-                # Single-ControlNet path: leave native chain behavior untouched.
-                if len(chain) <= 1:
+                trimmed_original = chain[:slot_count]
+                if len(trimmed_original) == 0:
+                    out.append([t[0], d])
+                    continue
+
+                # Original single chain at unit weight is already native and has
+                # no recursion to rescue. Leave it untouched for speed/behavior.
+                if len(chain) == 1 and slot_count >= 1 and _is_one(weights[0]):
                     if DEBUG:
                         print(
                             f"[JLC-ControlNet Composition] {stream_name}[{row_index}] "
@@ -231,38 +231,18 @@ class JLC_ControlNetComposition:
                     out.append([t[0], d])
                     continue
 
-                detached_chain = make_detached_chain(chain)
-                trimmed_chain = detached_chain[:slot_count]
-                trimmed_names = [safe_cnet_name(c) for c in trimmed_chain]
-
-                if len(trimmed_chain) <= 1:
-                    if DEBUG:
-                        print(
-                            f"[JLC-ControlNet Composition] {stream_name}[{row_index}] "
-                            f"fallback=trimmed_native_single original_chain={chain_names} "
-                            f"trimmed_chain={trimmed_names}"
-                        )
-                    out.append([t[0], d])
-                    continue
-
-                trimmed_weights = weights[:len(trimmed_chain)]
-                final_weights = [w * (alpha ** i) for i, w in enumerate(trimmed_weights)]
+                replacement, replacement_kind, trimmed_names, trimmed_weights, final_weights = build_replacement(chain, chain_names)
 
                 if DEBUG:
                     print(
                         f"[JLC-ControlNet Composition] {stream_name}[{row_index}] "
-                        f"fallback=composed original_chain={chain_names} "
+                        f"fallback={replacement_kind} original_chain={chain_names} "
                         f"trimmed_chain={trimmed_names} raw_weights={trimmed_weights} "
                         f"final_weights={final_weights} alpha={alpha}"
                     )
 
-                d["control"] = JLC_ComposedControlNet(
-                    trimmed_chain,
-                    final_weights,
-                    debug_label="JLC-ControlNet Composition",
-                    debug_names=trimmed_names,
-                    debug_alpha=alpha,
-                )
+                d["control"] = replacement
+                d["control_apply_to_uncond"] = False
                 out.append([t[0], d])
 
             return out
@@ -271,3 +251,12 @@ class JLC_ControlNetComposition:
             process_conditioning(positive, "positive"),
             process_conditioning(negative, "negative"),
         )
+
+
+NODE_CLASS_MAPPINGS = {
+    "JLC_ControlNetComposition": JLC_ControlNetComposition,
+}
+
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "JLC_ControlNetComposition": "JLC ControlNet Composition",
+}
