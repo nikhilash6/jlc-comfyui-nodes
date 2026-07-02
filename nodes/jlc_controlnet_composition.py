@@ -2,14 +2,197 @@
 JLC ControlNet Composition
 --------------------------
 
-Converts an already-built native ComfyUI ControlNet chain into an explicit
-non-recursive weighted composition.
+- JLC ComfyUI Nodes Collection
+  - This node is part of the **JLC Custom Nodes for ComfyUI**
+    collection developed by **J. L. Córdova**.
 
-This pass keeps the April non-recursive fusion algorithm intact and only hardens
-Comfy-facing behavior: imports are explicit, chain clipping is honored even when
-it leaves one child, non-unit single weights are honored through the composed
-wrapper, and identical conditioning rows share the same replacement wrapper so
-sampler batching is not defeated by needless object duplication.
+  - Repository
+    https://github.com/Damkohler/jlc-comfyui-nodes
+
+  - The JLC nodes focus on practical workflow improvements for
+    image-generation pipelines, particularly:
+        • Flux-based workflows
+        • LoRA experimentation
+        • advanced inpainting / outpainting pipelines
+        • multi-ControlNet composition and orchestration
+
+- Node Purpose
+  - The **JLC ControlNet Composition** node is the original cornerstone
+    of the JLC linearized non-recursive ControlNet architecture.
+
+  - It converts an already-built native ComfyUI ControlNet chain into
+    an explicit weighted composition that presents one ControlNet-compatible
+    object to the sampler.
+
+  - The typical modular workflow is:
+
+        Apply Advanced → Apply Advanced → ... → Composition
+
+    In this workflow:
+        • Apply Advanced nodes construct an ordinary native
+          `previous_controlnet` chain
+        • Composition extracts the chain before sampling
+        • each ControlNet is detached from recursive linkage
+        • the detached ControlNets are evaluated independently
+        • their outputs are combined through weighted additive fusion
+
+  - This modular workflow is a first-class counterpart to
+    **JLC ControlNet Orchestrator (Advanced)**.
+
+    Both paths use the same validated non-recursive fusion core:
+        • Composition receives a chain assembled elsewhere
+        • Orchestrator Advanced prepares its ControlNets internally
+        • the sampler-facing execution and fusion mathematics are shared
+
+- Chain Extraction and Isolation
+  - Composition reads the native `previous_controlnet` chain in its
+    original oldest-to-newest order.
+
+  - Each selected ControlNet is isolated using `copy.copy()`:
+        • upstream ControlNet objects are not mutated
+        • `previous_controlnet` is set to `None` on each copy
+        • inherited MultiGPU clone bookkeeping is cleared
+        • underlying model patchers and model weights remain shared
+        • `deepcopy` is never used
+
+  - The `slot_count` setting determines how many ControlNets from the
+    extracted chain participate in composition.
+
+    If the extracted chain is longer than `slot_count`, later members are
+    intentionally excluded. If the visible weight rows exceed the chain
+    length, unused non-zero rows are reported through diagnostic warnings.
+
+- Composition Mathematics
+  - Multi-ControlNet composition is defined as:
+
+        combined = Σ [(w_i · alpha^i) · C_i(x)]
+
+    where:
+        • C_i(x) is the output of ControlNet `i`, evaluated independently
+          against the same sampler state
+        • w_i is the user-defined weight for ControlNet `i`
+        • alpha^i applies optional order bias across the extracted chain
+        • chain indexing begins with exponent zero for the oldest ControlNet
+        • negative ControlNet weights are supported
+        • alpha values below 1 favor earlier ControlNets
+        • alpha values above 1 favor later ControlNets
+
+  - Composition changes how ControlNet outputs are aggregated. It does not
+    alter each ControlNet's own hint, strength, activation range, VAE
+    preparation, or internal inference behavior.
+
+- Fusion and Tensor Ownership
+  - Each detached ControlNet is evaluated independently rather than invoking
+    the next ControlNet recursively through `previous_controlnet`.
+
+  - The shared fusion core uses a streaming accumulation strategy:
+        • the first available output tensor is cloned when ownership is taken
+        • its effective weight is applied in-place
+        • later ControlNet outputs are accumulated with:
+
+              dst.add_(value, alpha=weight)
+
+        • output tensors are not cloned unnecessarily
+        • upstream ControlNet output storage is not mutated
+
+  - Optional CUDA synchronization after each child evaluation is available
+    only as a diagnostic or compatibility setting. It is disabled by default
+    because current ComfyUI and DynamicVRAM execution generally perform better
+    without forced per-child synchronization.
+
+- Native Equivalent Paths
+  - Composition avoids creating a wrapper when native execution is already
+    mathematically equivalent.
+
+  - If the original conditioning contains only one ControlNet at unit weight,
+    the native ControlNet is left unchanged.
+
+  - If chain clipping leaves one detached ControlNet at a final weight of 1.0,
+    Composition uses that detached native ControlNet directly.
+
+  - A single ControlNet with a non-unit effective weight still uses the
+    composed wrapper so that the declared weighting remains exact.
+
+- Conditioning Integration
+  - Positive and negative conditioning metadata are shallow-copied before
+    replacement.
+
+  - Matching conditioning rows reuse the same replacement ControlNet object
+    when their extracted chain and effective weights are identical. This
+    avoids needless wrapper duplication and preserves sampler batching
+    opportunities.
+
+  - The node sets:
+
+        control_apply_to_uncond = False
+
+    in accordance with the surrounding ComfyUI ControlNet conditioning path.
+
+- Runtime Integration
+  - The composed wrapper exposes the interfaces expected by current ComfyUI
+    sampler and model-management paths, including:
+        • `previous_controlnet`
+        • `multigpu_clones`
+        • `get_control`
+        • `get_models`
+        • `get_extra_hooks`
+        • `inference_memory_requirements`
+        • `pre_run`
+        • `cleanup`
+
+  - Child model objects are exposed to ComfyUI model management while
+    temporary inference-memory requirements are estimated from the largest
+    sequential child requirement rather than by blindly summing all children.
+
+  - Composition does not load ControlNet models and does not own model-cache
+    policy. Model loading, reuse, and residency remain the responsibility of
+    upstream loaders, Apply Advanced nodes, and ComfyUI model management.
+
+  - The node is designed to cooperate with normal ComfyUI VRAM management
+    and DynamicVRAM behavior. It does not replace ComfyUI loading, offloading,
+    weight patching, or device-residency policy.
+
+- Diagnostic Behavior
+  - When JLC ControlNet debugging is enabled, the node reports:
+        • extracted chain order
+        • visible and effective weights
+        • native or composed routing decisions
+        • chain-length and slot-count mismatches
+        • ignored or unused weight rows
+
+  - These diagnostics are intended to make modular multi-ControlNet workflows
+    inspectable without changing their mathematical behavior.
+
+- Relationship to JLC Orchestrators
+  - **JLC ControlNet Composition** is the modular composition interface.
+
+  - **JLC ControlNet Orchestrator (Advanced)** is the integrated
+    internal-loader interface.
+
+  - **JLC ControlNet Orchestrator** is the direct external-input interface.
+
+  - All three rely on the same validated linearized non-recursive
+    weighted-fusion algorithm. Their primary differences concern workflow
+    construction, model sourcing, and user interface—not composition math.
+
+- MultiGPU Scope
+  - The composed wrapper includes compatibility shunts required by current
+    ComfyUI interfaces but does not implement real MultiGPU ControlNet
+    cloning.
+
+  - Use this node as a single-device composition path unless explicit
+    MultiGPU support is added in a future implementation.
+
+- Attribution & License
+  - Concept and implementation by **J. L. Córdova**
+    with development assistance from **ChatGPT (OpenAI)**.
+
+  - Inspired by and interoperable with the ControlNet execution model in:
+    https://github.com/comfyanonymous/ComfyUI
+
+  - Copyright (c) 2026 J. L. Córdova
+
+  - Released under the **MIT License**.
 """
 
 from __future__ import annotations
@@ -17,7 +200,6 @@ from __future__ import annotations
 import math
 
 from ..jlc_custom_nodes_versions import JLC_CONTROLNET_VERSION
-
 from .jlc_controlnet_nonrecursive_core import (
     DEBUG,
     JLC_ComposedControlNet,
@@ -26,21 +208,25 @@ from .jlc_controlnet_nonrecursive_core import (
     safe_cnet_name,
 )
 
+
 MANIFEST = {
     "name": "JLC ControlNet Composition",
     "version": JLC_CONTROLNET_VERSION,
     "author": "J. L. Córdova",
     "description": (
-        "Converts an existing native ControlNet chain into a non-recursive "
-        "weighted composition. Extracts and shallow-detaches upstream ControlNets, "
-        "uses a sampler-facing composed wrapper for weighted fusion, preserves "
-        "native behavior only when mathematically equivalent, and warns when "
-        "visible weight rows do not match the extracted chain."
+        "Original modular interface for the validated JLC non-recursive "
+        "ControlNet composition architecture. Extracts native "
+        "previous_controlnet chains, shallow-detaches their members without "
+        "mutating upstream objects, applies chain clipping and order-biased "
+        "weights, and evaluates selected ControlNets independently through "
+        "the shared streaming weighted-fusion core. Preserves mathematically "
+        "equivalent native single-ControlNet paths and integrates with current "
+        "ComfyUI sampler, lifecycle, and model-management interfaces."
     ),
 }
 
-MAX_SLOTS = 10
 
+MAX_SLOTS = 8
 
 def _is_one(value: float) -> bool:
     try:

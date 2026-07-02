@@ -2,13 +2,103 @@
 JLC ControlNet Orchestrator (Advanced)
 --------------------------------------
 
-Internal-loader multi-ControlNet Orchestrator using the shared JLC model cache
-and the shared non-recursive composition core.
+- JLC ComfyUI Nodes Collection
+  - This node is part of the **JLC Custom Nodes for ComfyUI**
+    collection developed by **J. L. Córdova**.
 
-This pass keeps the April linearized composition math intact and only hardens
-interfaces with newer Comfy paths: shared core delegation, centralized per-slot
-copy/conditioning, strict preflight before model loading, and the existing
-single-GPU/no-real-MultiGPU shunt.
+  - Repository
+    https://github.com/Damkohler/jlc-comfyui-nodes
+
+  - The JLC nodes focus on practical workflow improvements for
+    image-generation pipelines, particularly:
+        • Flux-based workflows
+        • LoRA experimentation
+        • advanced inpainting / outpainting pipelines
+        • multi-ControlNet composition and orchestration
+
+- Node Purpose
+  - The **JLC ControlNet Orchestrator (Advanced)** is the integrated,
+    internal-loader interface for building weighted multi-ControlNet
+    workflows with the JLC non-recursive composition architecture.
+
+  - The node provides:
+        • up to eight dynamically exposed ControlNet slots
+        • internal model selection through the shared JLC model cache
+        • `SHARE_PREVIOUS` reuse of the most recently selected model
+        • independent hint, strength, start, end, and weight controls
+          for each slot
+        • strict slot validation before any ControlNet model is loaded
+        • optional order bias through the global `alpha` parameter
+
+  - Each active slot:
+        • resolves or reuses a raw cached ControlNet base model
+        • creates an isolated per-run ControlNet copy
+        • applies its own hint image, strength, activation range, and VAE
+        • remains independent of the other prepared ControlNet instances
+
+  - Multi-ControlNet execution uses the shared JLC linearized,
+    non-recursive fusion core:
+
+        combined = Σ [(w_i · alpha^i) · C_i(x)]
+
+    where:
+        • C_i(x) is the output of ControlNet slot `i`, evaluated
+          independently against the same sampler state
+        • w_i is the user-defined slot weight
+        • alpha^i applies the optional order bias
+        • negative weights and negative alpha values are supported
+
+  - The fusion core:
+        • does not build a recursive `previous_controlnet` chain
+          between active slots
+        • does not mutate cached base ControlNet objects
+        • does not use `deepcopy`
+        • evaluates prepared ControlNets independently
+        • clones tensors only when taking ownership of output data
+        • accumulates subsequent outputs in-place
+        • presents one ControlNet-compatible wrapper to the ComfyUI sampler
+
+  - When only one effective ControlNet remains at a final weight of 1.0,
+    the node uses the mathematically equivalent native single-ControlNet
+    path instead of creating a composed wrapper.
+
+  - Runtime Integration
+    - The node exposes child models, hooks, lifecycle methods, and inference
+      memory requirements through the interfaces expected by current ComfyUI
+      sampler and model-management paths.
+
+    - It is designed to cooperate with normal ComfyUI model management and
+      DynamicVRAM behavior. It does not replace ComfyUI loading, offloading,
+      patching, or device-residency policy.
+
+    - The shared JLC cache stores raw ControlNet base objects only.
+      Per-run conditioning state is applied exclusively to isolated copies.
+
+  - Relationship to JLC ControlNet Composition
+    - **Orchestrator Advanced** is the compact, integrated workflow.
+
+    - **Apply Advanced → Composition** is the corresponding modular workflow.
+
+    - Both use the same validated non-recursive weighted-fusion algorithm;
+      neither path is mathematically subordinate to the other.
+
+  - MultiGPU Scope
+    - The wrapper includes compatibility shunts required by current ComfyUI
+      interfaces but does not implement real MultiGPU ControlNet cloning.
+
+    - Use this node as a single-device ControlNet orchestration path unless
+      explicit MultiGPU support is added in a future implementation.
+
+- Attribution & License
+  - Concept and implementation by **J. L. Córdova**
+    with development assistance from **ChatGPT (OpenAI)**.
+
+  - Inspired by and interoperable with the ControlNet execution model in:
+    https://github.com/comfyanonymous/ComfyUI
+
+  - Copyright (c) 2026 J. L. Córdova
+
+  - Released under the **MIT License**.
 """
 
 from __future__ import annotations
@@ -37,16 +127,17 @@ MANIFEST = {
     "version": JLC_CONTROLNET_VERSION,
     "author": "J. L. Córdova",
     "description": (
-        "Internal-loader multi-ControlNet orchestrator using the shared JLC "
-        "model residency cache and JLC non-recursive weighted fusion. Supports "
-        "dynamic slots, SHARE_PREVIOUS model reuse, strict missing-hint validation, "
-        "preflight before ControlNet loading, native single-ControlNet routing "
-        "when mathematically equivalent, and composed fusion for weighted or "
-        "multi-ControlNet workflows."
+        "Integrated internal-loader multi-ControlNet orchestrator using the "
+        "shared JLC model cache and validated non-recursive weighted-fusion "
+        "core. Supports dynamic slots, SHARE_PREVIOUS model reuse, strict "
+        "preflight before model loading, independent per-slot conditioning, "
+        "order-biased weights, native single-ControlNet routing when "
+        "mathematically equivalent, and current ComfyUI sampler and "
+        "model-management compatibility."
     ),
 }
 
-MAX_SLOTS = 10
+MAX_SLOTS = 8
 DISABLED = "DISABLED"
 SHARE_PREVIOUS = "SHARE_PREVIOUS"
 

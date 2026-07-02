@@ -15,29 +15,20 @@
   <img src="https://img.shields.io/badge/status-active-brightgreen" alt="Status: active">
 </p>
 
-> [!WARNING]
-> **Temporary ControlNet compatibility notice**
+> [!IMPORTANT]
+> **ControlNet compatibility update — prior warning withdrawn**
 >
-> Recent ComfyUI sampler changes affected the older JLC ControlNet Composition and Orchestrator wrappers.
+> The temporary ControlNet compatibility warning previously shown here is no longer applicable. The current ControlNet Composition, Orchestrator, Orchestrator Advanced, Apply Advanced, shared composition core, and dynamic slot-visibility paths have been audited, corrected, and validated against current ComfyUI sampler and model-management interfaces.
 >
-> We believe the issue is now fixed in the current `main` branch, including updated ControlNet Composition, Orchestrator, Advanced Orchestrator, and related frontend slot-visibility support. However, testing is still ongoing, so please proceed with caution.
+> Compared with the prior release, the revised implementation provides **substantially improved VRAM handling and markedly reduced execution time** in the tested Flux and multi-ControlNet workflows. These gains come from internal composition optimizations, corrected cache and lifecycle integration, removal of unnecessary synchronization from the normal path, and alignment with current ComfyUI architecture.
 >
-> If you rely on the ControlNet Composition or Orchestrator nodes for production workflows, keep a backup of your working install before updating.
+> Validation included demanding Flux workflows with multiple LoRAs, Union ControlNet models, repeated ControlNet use, and as many as four ControlNet slots. The previously observed catastrophic slowdown was traced primarily to launching ComfyUI with forced `--lowvram`, not to the JLC non-recursive composition architecture.
 >
-> Detailed documentation will follow shortly.
->
-> Bug reports are welcome, especially with:
->
-> - ComfyUI version or commit
-> - JLC node used
-> - Workflow screenshot or JSON, if shareable
-> - Console log
-> - GPU and VRAM amount
-
+> The current implementation was validated against ComfyUI commit `2a610155` from June 22, 2026, with frontend package `1.45.19`. See the detailed ControlNet guide for the full compatibility baseline, benchmark context, and runtime recommendations.
 
 **JLC ComfyUI Nodes** is a practical custom-node collection for ComfyUI workflows that need cleaner ControlNet composition, padded inpainting/outpainting helpers, dynamic ControlNet auxiliary preprocessors, dynamic LoRA loading, and small workflow utilities.
 
-The collection is developed by **J. L. Córdova** and is especially focused on Flux-oriented image generation pipelines, LoRA experimentation, ControlNet-heavy workflows, inpainting/outpainting, and multi-stage inference setups.
+The collection is developed by **J. L. Córdova** and is especially focused on Flux-oriented image-generation pipelines, LoRA experimentation, ControlNet-heavy workflows, inpainting/outpainting, and multi-stage inference setups.
 
 ---
 
@@ -55,19 +46,23 @@ This README is the front page for the repository. Detailed documentation is spli
 
 ## Node Families
 
-### 1. ControlNet Composition and Orchestrator
+### 1. ControlNet Composition and Orchestration
 
-Nodes for replacing recursive ControlNet chains with explicit non-recursive weighted composition, plus supporting Apply nodes for native chained workflows.
+A family of nodes for native ControlNet application, modular chain construction, and explicit linearized non-recursive weighted fusion.
 
 This family includes:
 
 - **JLC ControlNet Composition**
 - **JLC ControlNet Orchestrator**
-- **JLC ControlNet Orchestrator - Advanced Dynamic**
+- **JLC ControlNet Orchestrator (Advanced)**
 - **JLC ControlNet Apply**
-- **JLC ControlNet Apply - Advanced**
+- **JLC ControlNet Apply (Advanced)**
 
-The headline idea is simple: ComfyUI's native ControlNet behavior is recursive and chain-based; the JLC Composition and Orchestrator nodes provide an experimental parallel-fusion alternative for multi-ControlNet workflows that should result in significant inference speed in most configurations.
+The central design treats prepared ControlNets as independent operators evaluated against the same sampler state and combines their outputs through explicit weighted addition. The modular **Apply Advanced → Composition** workflow and the integrated **Orchestrator Advanced** workflow use the same validated fusion core.
+
+- **Orchestrator Advanced** is the recommended integrated interface for most new multi-ControlNet workflows.
+- **Apply Advanced → Composition** is a first-class modular interface when explicit chaining, pass-through wiring, or separate model sourcing is useful.
+- **Orchestrator** remains the specialized external-input interface for ControlNet objects supplied by standard, third-party, custom, or nonstandard-location loaders.
 
 [Read the ControlNet guide](docs/controlnet-composition.md)
 
@@ -125,7 +120,7 @@ These nodes predeclare up to ten LoRA slots and use frontend visibility controls
 
 ### 5. Utility Nodes
 
-Small workflow support nodes for seed discipline and stage-boundary memory hygiene.
+Small workflow-support nodes for seed discipline and stage-boundary memory hygiene.
 
 This family includes:
 
@@ -136,11 +131,13 @@ This family includes:
 
 ---
 
+## Example Workflows
+
 The repository includes example ComfyUI workflows in `assets/workflows/`. PNG workflows contain embedded ComfyUI graphs and can be dragged directly onto the ComfyUI canvas.
 
-The front-page showcase workflow for this release is a compact ControlNet orchestration example. It is intended to demonstrate a practical combination of JLC nodes in one workflow, including dynamic LoRA loading, ControlNet Aux preprocessing, seed/display utility behavior, and JLC ControlNet orchestration.
+The front-page showcase workflow for this release is a compact ControlNet orchestration example. It demonstrates a practical combination of JLC nodes in one workflow, including dynamic LoRA loading, ControlNet Aux preprocessing, seed/display utility behavior, and JLC ControlNet orchestration.
 
-## Release 1.5 Showcase Workflow
+### Release 1.5 Showcase Workflow
 
 ![JLC Orchestrator Showcase Workflow](assets/workflows/Release_1.5/Orchestrator_Workflow.png)
 
@@ -148,6 +145,8 @@ The front-page showcase workflow for this release is a compact ControlNet orches
 [Download JSON workflow](assets/workflows/Release_1.5/Orchestrator_Workflow.json)
 
 PNG workflows contain embedded ComfyUI graphs and may be dragged directly into the ComfyUI canvas. The JSON version is provided as a plain workflow backup for users who prefer explicit import files.
+
+Additional ControlNet workflow placeholders and documentation targets are listed in the [ControlNet guide](docs/controlnet-composition.md).
 
 ---
 
@@ -189,13 +188,17 @@ Some upstream preprocessors may download or load large auxiliary models the firs
 
 The nodes are designed for ComfyUI custom-node workflows and have been developed primarily around:
 
-- Flux-based image generation workflows
+- Flux-based image generation
 - ControlNet-heavy pipelines
 - LoRA experimentation
-- inpainting and outpainting workflows
+- inpainting and outpainting
 - multi-stage inference graphs
 
-Some ControlNet composition/orchestration nodes intentionally experiment with non-canonical ControlNet execution. They are documented as experimental where appropriate.
+The current ControlNet family is aligned with the ComfyUI sampler, ControlNet, model-management, hook, and lifecycle interfaces present at the tested baseline documented in the ControlNet guide. Later ComfyUI revisions may require renewed testing if those interfaces change.
+
+For the validated 16 GB RTX 4090 Laptop workflow, use normal ComfyUI VRAM behavior with DynamicVRAM where desired. Forced `--lowvram` is not recommended for the benchmarked Flux and multi-ControlNet configurations because it caused destructive partial unload/reload cycles and severe execution-time regression.
+
+Real MultiGPU ControlNet cloning is not implemented by the JLC composed wrapper. The compatibility attributes present in the wrapper are single-device shunts, not a claim of MultiGPU support.
 
 ---
 

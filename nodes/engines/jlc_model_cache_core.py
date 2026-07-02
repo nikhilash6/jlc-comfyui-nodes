@@ -75,11 +75,11 @@ import threading
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Iterable, Optional
 
-from ...jlc_custom_nodes_versions import JLC_CONTROLNET_VERSION
+from ...jlc_custom_nodes_versions import JLC_MODEL_CACHE_CORE_VERSION
 
 MANIFEST = {
     "name": "JLC Shared Model Residency Cache Core",
-    "version": JLC_CONTROLNET_VERSION,
+    "version": JLC_MODEL_CACHE_CORE_VERSION,
     "author": "J. L. Córdova",
     "description": (
         "Shared process-local cache/residency helper for heavyweight JLC "

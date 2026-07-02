@@ -2,19 +2,334 @@
 JLC ControlNet Non-Recursive ControlNet Composition Core
 --------------------------------------------------------
 
-Shared non-recursive ControlNet composition primitives for the JLC ControlNet
-Composition and Orchestrator nodes.
+- JLC ComfyUI Nodes Collection
+  - This internal module is part of the **JLC Custom Nodes for ComfyUI**
+    collection developed by **J. L. Córdova**.
 
-Prime invariants:
-    - no deepcopy;
-    - no mutation of upstream native ControlNet chains;
-    - child ControlNets are shallow-copied/detached where needed;
-    - the sampler sees one ControlNet-like object for composed execution;
-    - composed execution remains the April-style linear non-recursive fusion:
-          combined = Σ w_i * C_i(x)
-      with first-output ownership clone and later in-place accumulation;
-    - MultiGPU remains an explicit no-clone shunt, not a real implementation.
+  - Repository
+    https://github.com/Damkohler/jlc-comfyui-nodes
+
+  - The JLC nodes focus on practical workflow improvements for
+    image-generation pipelines, particularly:
+        • Flux-based workflows
+        • LoRA experimentation
+        • advanced inpainting / outpainting pipelines
+        • multi-ControlNet composition and orchestration
+
+- Module Purpose
+  - The **JLC ControlNet Non-Recursive ControlNet Composition Core**
+    is the shared mathematical and compatibility layer used by:
+        • JLC ControlNet Composition
+        • JLC ControlNet Orchestrator
+        • JLC ControlNet Orchestrator (Advanced)
+
+  - This module is not a ComfyUI node. It contains the common primitives
+    that define how JLC ControlNet chains are extracted, isolated, prepared,
+    routed, evaluated, and fused.
+
+  - Centralizing these operations ensures that the modular Composition
+    workflow and both Orchestrator variants use the same validated
+    non-recursive execution model rather than maintaining independent
+    implementations of the composition algorithm.
+
+- Prime Architectural Invariants
+  - The shared implementation preserves the following invariants:
+        • no use of `deepcopy`
+        • no mutation of upstream native ControlNet chains
+        • no mutation of cached raw ControlNet base objects
+        • shallow isolation of child ControlNets where required
+        • removal of recursive linkage before composed execution
+        • independent evaluation of each prepared ControlNet
+        • explicit tensor ownership before in-place accumulation
+        • one sampler-facing ControlNet-compatible composition object
+        • native routing whenever it is mathematically equivalent
+        • no implicit or partial implementation of real MultiGPU support
+
+- Mathematical Model
+  - The core implements linear weighted ControlNet composition:
+
+        combined(x) = Σ [W_i · C_i(x)]
+
+    where:
+        • C_i(x) is the output of child ControlNet `i`, evaluated
+          independently against the same sampler state
+        • W_i is the final effective weight supplied to the composed wrapper
+        • child outputs interact only through additive output aggregation
+
+  - For callers that expose an order-bias parameter, the effective weight is:
+
+        W_i = w_i · alpha^i
+
+    where:
+        • w_i is the user-defined ControlNet weight
+        • alpha is the caller-defined order-bias parameter
+        • i is the original zero-based chain or slot position
+        • skipped or zero-weight slots do not renumber later exponents
+        • negative weights are supported
+        • negative alpha values are supported when permitted by the caller
+
+  - The composed wrapper itself receives the final effective weights.
+    It does not reinterpret, normalize, or redistribute them.
+
+  - This is a linearized non-recursive model. Child ControlNets are treated
+    as independent operators whose interaction occurs only when their output
+    tensors are combined.
+
+- Native Chain Extraction
+  - `extract_controlnet_chain()` reads an existing ComfyUI
+    `previous_controlnet` chain.
+
+  - The extracted chain is returned in oldest-to-newest order so that visible
+    weights and order bias correspond to the workflow's original ControlNet
+    construction order.
+
+  - Object identity is tracked during traversal to prevent malformed cyclic
+    chains from causing infinite recursion or unbounded traversal.
+
+- Shallow Detachment
+  - `make_detached_chain()` isolates extracted ControlNets using
+    `copy.copy()`.
+
+  - For every detached child:
+        • the original upstream object remains unchanged
+        • `previous_controlnet` is set to `None`
+        • inherited `multigpu_clones` bookkeeping is cleared
+        • underlying model patchers and model weights remain shared
+        • expensive or unsafe deep copying is avoided
+
+  - Shallow detachment removes recursive execution linkage while preserving
+    the prepared ControlNet state needed for inference.
+
+- Per-Run ControlNet Preparation
+  - `prepare_controlnet_copy()` provides the shared native-style preparation
+    path used by the Orchestrator nodes.
+
+  - It performs:
+
+        base_controlnet.copy().set_cond_hint(
+            control_hint,
+            strength,
+            timestep_percent_range,
+            vae=vae,
+        )
+
+  - This ensures that:
+        • cached or externally supplied base objects are not conditioned
+          in-place
+        • hint state belongs to an isolated per-run ControlNet object
+        • native ComfyUI hint, strength, activation-range, and VAE handling
+          remain in effect
+        • stale MultiGPU clone bookkeeping is removed from the prepared copy
+
+- Sampler-Facing Composed Wrapper
+  - `JLC_ComposedControlNet` presents the prepared children as one
+    ControlNet-compatible object to the ComfyUI sampler.
+
+  - The wrapper stores:
+        • the ordered child ControlNet objects
+        • their final effective weights
+        • `previous_controlnet = None`
+        • an empty `multigpu_clones` compatibility dictionary
+        • optional diagnostic names and metadata
+
+  - The wrapper does not construct a hidden native ControlNet chain and does
+    not merge or rewrite child model weights.
+
+- Streaming Fusion and Tensor Ownership
+  - During `get_control()`, each non-zero child is evaluated independently:
+
+        output_i = child_i.get_control(...)
+
+  - The first available output tensor establishes ownership of the combined
+    result:
+        • the tensor is cloned
+        • its effective weight is applied in-place when not equal to 1.0
+        • the original child output tensor is never reused as mutable
+          combined storage
+
+  - Later outputs are accumulated into the owned destination tensor with:
+
+        dst.add_(value, alpha=weight)
+
+  - This strategy:
+        • avoids unnecessary cloning of every child output
+        • avoids mutating storage owned by child ControlNets
+        • keeps accumulation explicit and deterministic
+        • reduces avoidable temporary tensor allocation
+        • supports positive, zero, and negative effective weights
+
+  - The fusion logic also handles:
+        • child outputs that return `None`
+        • individual `None` tensors within output lists
+        • output keys first introduced by later children
+        • output lists of differing lengths
+        • zero-weight or missing child ControlNets
+
+- Synchronization Policy
+  - Forced CUDA synchronization after every child was useful during early
+    ownership and release investigations, but it can impose a significant
+    performance penalty in current ComfyUI and DynamicVRAM execution.
+
+  - Per-child synchronization is therefore disabled by default.
+
+  - It remains available as an opt-in diagnostic or compatibility control
+    through:
+
+        JLC_CONTROLNET_SYNC_AFTER_CHILD=1
+
+  - Enabling this setting changes execution synchronization behavior but does
+    not change the composition mathematics.
+
+- Native and Composed Routing
+  - `compose_or_native_fallback()` provides the shared routing policy used
+    by the Orchestrator nodes.
+
+  - Routing behavior is:
+        • no effective active ControlNets:
+              return conditioning unchanged
+
+        • one effective ControlNet at final weight 1.0:
+              use the native ComfyUI ControlNet path
+
+        • one ControlNet at a non-unit final weight:
+              use the composed wrapper so the requested weight is honored
+
+        • multiple effective ControlNets:
+              use the composed wrapper and weighted non-recursive fusion
+
+  - The native single-ControlNet path preserves any ControlNet already
+    attached to the incoming conditioning by reconnecting it through
+    `set_previous_controlnet()`.
+
+  - Positive and negative conditioning rows reuse prepared native copies
+    when they share the same previous-ControlNet identity.
+
+- Conditioning Injection
+  - Conditioning dictionaries are shallow-copied before ControlNet
+    replacement.
+
+  - The shared injection helpers set:
+
+        control_apply_to_uncond = False
+
+  - Composed execution installs the same sampler-facing wrapper into matching
+    conditioning paths rather than creating unnecessary duplicate wrappers.
+
+- ComfyUI Compatibility Surface
+  - `JLC_ComposedControlNet` exposes the interfaces required by current
+    ComfyUI sampler and model-management paths, including:
+        • `get_control`
+        • `get_models`
+        • `get_models_only_self`
+        • `get_extra_hooks`
+        • `get_instance_for_device`
+        • `inference_memory_requirements`
+        • `pre_run`
+        • `cleanup`
+        • `copy`
+
+  - `get_models()` aggregates child model objects and removes duplicates by
+    object identity so ComfyUI can manage their loading and residency.
+
+  - `get_extra_hooks()` forwards and combines child ControlNet hooks.
+
+  - `pre_run()` forwards sampler preparation to each child.
+
+  - `cleanup()` forwards cleanup once per unique child object.
+
+  - `copy()` creates a shallow wrapper copy while retaining the already
+    prepared child ControlNets. It does not create a new native chain or
+    duplicate model ownership.
+
+- Inference Memory Reporting
+  - Child model weights are exposed through `get_models()` and remain under
+    ComfyUI model-management control.
+
+  - Temporary inference-memory requirements are reported as the largest
+    child requirement rather than the sum of all child requirements because
+    children are evaluated sequentially.
+
+  - This distinction avoids representing sequential scratch requirements as
+    though every child required its full temporary inference workspace
+    simultaneously.
+
+- Model-Management Scope
+  - This module does not load ControlNet files and does not own shared-cache
+    capacity or eviction policy.
+
+  - Model sourcing remains the responsibility of:
+        • upstream ComfyUI or third-party loaders
+        • JLC ControlNet Apply Advanced
+        • JLC ControlNet Orchestrator (Advanced)
+        • the shared JLC model-cache layer
+
+  - The core is designed to cooperate with normal ComfyUI loading,
+    offloading, weight patching, and DynamicVRAM behavior by exposing child
+    models and lifecycle information through the expected interfaces.
+
+  - It does not replace ComfyUI device-residency policy and does not attempt
+    to force models to remain loaded.
+
+- MultiGPU Scope
+  - `multigpu_clones = {}` is an explicit compatibility shunt, not an
+    implementation of MultiGPU ControlNet execution.
+
+  - `get_instance_for_device()` returns the current wrapper for ordinary
+    single-device compatibility.
+
+  - `deepclone_multigpu()` raises a clear runtime error rather than silently
+    creating unsafe cross-device ownership or returning an invalid clone.
+
+  - Real MultiGPU ControlNet cloning must not be inferred from the presence
+    of the compatibility attributes and should only be implemented as a
+    separate, explicitly designed feature.
+
+- Diagnostics
+  - Shared core diagnostics are quiet by default.
+
+  - They can be enabled with:
+
+        JLC_CONTROLNET_DEBUG=1
+
+  - Diagnostic output may include:
+        • wrapper creation and child order
+        • final effective weights
+        • native, composed, or passthrough routing
+        • first child evaluation
+        • skipped zero-weight children
+        • optional synchronization state
+
+  - Debugging changes observability only; it does not change the mathematical
+    result.
+
+- Role Within the JLC ControlNet Family
+  - This module is the unifying implementation contract for the JLC
+    non-recursive ControlNet family.
+
+  - **JLC ControlNet Composition** supplies the core with ControlNets
+    extracted from an existing native chain.
+
+  - **JLC ControlNet Orchestrator** supplies externally loaded ControlNet
+    objects and per-slot conditioning.
+
+  - **JLC ControlNet Orchestrator (Advanced)** supplies internally loaded or
+    shared cached models and per-slot conditioning.
+
+  - The nodes differ in model sourcing and workflow construction, but their
+    composed execution relies on this same weighted-fusion implementation.
+
+- Attribution & License
+  - Concept and implementation by **J. L. Córdova**
+    with development assistance from **ChatGPT (OpenAI)**.
+
+  - Inspired by and interoperable with the ControlNet execution model in:
+    https://github.com/comfyanonymous/ComfyUI
+
+  - Copyright (c) 2026 J. L. Córdova
+
+  - Released under the **MIT License**.
 """
+
 
 from __future__ import annotations
 
@@ -30,10 +345,15 @@ MANIFEST = {
     "version": JLC_CONTROLNET_HELPERS_VERSION,
     "author": "J. L. Córdova",
     "description": (
-        "Shared non-recursive ControlNet composition helper. Provides native "
-        "chain extraction, shallow detachment, a sampler-facing composed "
-        "ControlNet wrapper, compatibility shunts for current ComfyUI, and "
-        "native single-ControlNet routing when mathematically equivalent."
+        "Shared mathematical and compatibility core for the JLC non-recursive "
+        "ControlNet family. Provides cycle-safe native-chain extraction, "
+        "shallow detachment without upstream mutation, isolated per-run "
+        "ControlNet preparation, native single-ControlNet routing, and a "
+        "sampler-facing composed wrapper implementing explicit streaming "
+        "weighted fusion with first-output ownership and later in-place "
+        "accumulation. Exposes current ComfyUI model, hook, lifecycle, "
+        "inference-memory, and single-device compatibility interfaces while "
+        "keeping real MultiGPU cloning explicitly unsupported."
     ),
 }
 

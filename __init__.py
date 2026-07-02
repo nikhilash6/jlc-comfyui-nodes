@@ -43,6 +43,7 @@ from .nodes.jlc_controlnet_apply_advanced import JLC_ControlNetApplyAdvanced
 from .nodes.jlc_controlnet_composition import JLC_ControlNetComposition
 from .nodes.jlc_controlnet_orchestrator import JLC_ControlNetOrchestrator
 from .nodes.jlc_controlnet_orchestrator_adv import JLC_ControlNetOrchestratorAdvanced
+## from .nodes.jlc_controlnet_hint_prewarm import JLC_ControlNetHintPrewarm
 from .nodes.controlnet_aux_nodes.jlc_controlnet_aux_preproc_wrapper import JLC_DynamicAuxPreprocessorWrapper
 
 # LoRA Loaders
@@ -73,6 +74,7 @@ NODE_CLASS_MAPPINGS = {
     "JLC_ControlNetComposition": JLC_ControlNetComposition,
     "JLC_ControlNetOrchestrator": JLC_ControlNetOrchestrator,
     "JLC_ControlNetOrchestratorAdvanced": JLC_ControlNetOrchestratorAdvanced,
+    ## "JLC_ControlNetHintPrewarm": JLC_ControlNetHintPrewarm,
     "JLC_DynamicAuxPreprocessorWrapper": JLC_DynamicAuxPreprocessorWrapper,
 
     # LoRA Loaders
@@ -105,6 +107,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "JLC_ControlNetComposition": "\u2003JLC ControlNet Composition",
     "JLC_ControlNetOrchestrator": "\u2003JLC ControlNet Orchestrator",
     "JLC_ControlNetOrchestratorAdvanced": "\u2003JLC ControlNet Orchestrator (Advanced)",
+    ## "JLC_ControlNetHintPrewarm": "\u2003JLC ControlNet Hint Prewarm",
     "JLC_DynamicAuxPreprocessorWrapper": "\u2003JLC Dynamic Aux Preprocessor Wrapper",
 
     # LoRA Loaders
