@@ -47,10 +47,10 @@ The **JLC ControlNet Orchestrator (Advanced)** workflow serves both as an approa
 
 The **JLC All-In-One Workflow** presents the collection as a complete working toolchain rather than a set of isolated nodes. It combines ControlNet with representative nodes from the ControlNet Aux, Dynamic LoRA Loader, padded-image and padded-latent, and utility families.
 
-![JLC All-In-One Workflow](assets/workflows/Release_2.0/jlc_All_In_One_Workflow.png)
+![JLC All-In-One Workflow](assets/workflows/Release_2.0/jlc_All_In_One_workflow.png)
 
-[Download PNG workflow](assets/workflows/Release_2.0/jlc_All_In_One_Workflow.png) ·
-[Download JSON workflow](assets/workflows/Release_2.0/jlc_All_In_One_Workflow.json)
+[Download PNG workflow](assets/workflows/Release_2.0/jlc_All_In_One_workflow.png) ·
+[Download JSON workflow](assets/workflows/Release_2.0/jlc_All_In_One_workflow.json)
 
 As with the other workflows included in this documentation, each example is provided both as a PNG with an embedded workflow for direct drag-and-drop into ComfyUI and as a JSON file for standard workflow loading.
 

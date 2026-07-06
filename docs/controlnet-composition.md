@@ -805,10 +805,10 @@ Some ComfyUI-generated PNG workflows may appear unusual or broken in ordinary im
 
 Orchestrator Advanced does not use external model loaders or Apply ControlNet nodes. 
 
-![JLC Orchestrator Advanced](../assets/workflows/Release_2.0/jlc_Orchestrator_Advanced_Workflow.png)
+![JLC Orchestrator Advanced](../assets/workflows/Release_2.0/jlc_Orchestrator_Advanced_workflow.png)
 
-[Download PNG](../assets/workflows/Release_2.0/jlc_Orchestrator_Advanced_Workflow.png)
-[Download JSON](../assets/workflows/Release_2.0/jlc_Orchestrator_Advanced_Workflow.json)
+[Download PNG](../assets/workflows/Release_2.0/jlc_Orchestrator_Advanced_workflow.png)
+[Download JSON](../assets/workflows/Release_2.0/jlc_Orchestrator_Advanced_workflow.json)
 
 ### Composition modular workflow
 
