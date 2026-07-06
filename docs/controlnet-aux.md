@@ -193,16 +193,12 @@ Use native Aux nodes when the preprocessor has meaningful controls or special ou
 
 ## Example Workflows
 
-Detailed ControlNet Aux workflow examples will be added shortly.
+Usage of Dynamic Aux Preproecessor Wrapper
 
-Planned examples:
+![JLC Orchestrator Advanced](../assets/workflows/Release_2.0/jlc_ControlNet_Auxiliary_Preproc_workflow.png)
 
-- one input image processed into multiple hint images;
-- Aux wrapper outputs feeding **JLC ControlNet Orchestrator - Advanced Dynamic**;
-- Aux wrapper outputs feeding **JLC ControlNet Composition** after native Apply nodes;
-- comparison workflow showing when to use native Aux nodes instead of the wrapper.
-
-Workflow will be added shortly.
+[Download PNG](../assets/workflows/Release_2.0/jlc_ControlNet_Auxiliary_Preproc_workflow.png)
+[Download JSON](../assets/workflows/Release_2.0/jlc_ControlNet_Auxiliary_Preproc_workflow.json)
 
 ---
 

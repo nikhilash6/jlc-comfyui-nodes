@@ -581,7 +581,7 @@ class JLC_DynamicAuxPreprocessorWrapper:
     RETURN_TYPES = tuple(["IMAGE"] * MAX_SLOTS)
     RETURN_NAMES = tuple([f"image_{i:02d}" for i in range(1, MAX_SLOTS + 1)])
     FUNCTION = "execute"
-    CATEGORY = "JLC/ControlNet"
+    CATEGORY = "conditioning/controlnet"
 
     @classmethod
     def VALIDATE_INPUTS(cls, **kwargs):

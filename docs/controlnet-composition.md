@@ -797,92 +797,27 @@ The composed wrapper intentionally refuses real MultiGPU cloning. Use a single-d
 
 ## Example Workflows
 
-PNG workflows can contain embedded ComfyUI graphs and may be dragged directly onto the canvas. JSON versions are useful as explicit backups.
+PNG workflows contain embedded ComfyUI graphs and may be dragged directly onto the canvas. JSON versions are useful as explicit backups.
 
 Some ComfyUI-generated PNG workflows may appear unusual or broken in ordinary image viewers while still loading correctly in ComfyUI.
 
-### Release showcase: Orchestrator Advanced
+### Release showcase: Orchestrator Advanced workflow
 
-Existing showcase workflow:
+Orchestrator Advanced does not use external model loaders or Apply ControlNet nodes. 
 
-```markdown
-![JLC Orchestrator Showcase](../assets/workflows/Release_1.5/Orchestrator_Workflow.png)
+![JLC Orchestrator Advanced](../assets/workflows/Release_2.0/jlc_Orchestrator_Advanced_Workflow.png)
 
-[Download PNG](../assets/workflows/Release_1.5/Orchestrator_Workflow.png) ·
-[Download JSON](../assets/workflows/Release_1.5/Orchestrator_Workflow.json)
-```
+[Download PNG](../assets/workflows/Release_2.0/jlc_Orchestrator_Advanced_Workflow.png)
+[Download JSON](../assets/workflows/Release_2.0/jlc_Orchestrator_Advanced_Workflow.json)
 
 ### Composition modular workflow
 
-Placeholder for the recommended Apply Advanced → Composition example:
+ControlNet Apply Advanced → ControlNet Apply Advanced → ... → ControlNet Apply Advanced → Composition
 
-```markdown
-![JLC ControlNet Composition](../assets/workflows/jlc_ControlNet_Composition.png)
+![JLC ControlNet Composition](../assets/workflows/Release_2.0/jlc_ControlNet_Composition.png)
 
-[Download PNG](../assets/workflows/jlc_ControlNet_Composition.png) ·
-[Download JSON](../assets/workflows/jlc_ControlNet_Composition.json)
-```
-
-Suggested graph emphasis:
-
-```text
-Control image/preprocessors
-        ↓
-Apply Advanced → Apply Advanced → Composition → Sampler
-```
-
-### External-input Orchestrator workflow
-
-Placeholder for a workflow demonstrating custom or nonstandard ControlNet loading:
-
-```markdown
-![JLC ControlNet Orchestrator](../assets/workflows/JLC_ControlNet_Orchestrator_WorkFlow.png)
-
-[Download PNG](../assets/workflows/JLC_ControlNet_Orchestrator_WorkFlow.png) ·
-[Download JSON](../assets/workflows/JLC_ControlNet_Orchestrator_WorkFlow.json)
-```
-
-### Orchestrator Advanced multi-model workflow
-
-Placeholder for a dense dynamic-slot example with `SHARE_PREVIOUS` and distinct models:
-
-```markdown
-![JLC ControlNet Orchestrator Advanced](../assets/workflows/JLC_ControlNet_Orchestrator_Advanced_WorkFlow.png)
-
-[Download PNG](../assets/workflows/JLC_ControlNet_Orchestrator_Advanced_WorkFlow.png) ·
-[Download JSON](../assets/workflows/JLC_ControlNet_Orchestrator_Advanced_WorkFlow.json)
-```
-
-### Apply Advanced native-chain workflow
-
-Placeholder for native chained execution without Composition:
-
-```markdown
-![JLC ControlNet Apply Advanced](../assets/workflows/jlc_ControlNet_Apply_Advanced.png)
-
-[Download PNG](../assets/workflows/jlc_ControlNet_Apply_Advanced.png) ·
-[Download JSON](../assets/workflows/jlc_ControlNet_Apply_Advanced.json)
-```
-
-### Integrated versus modular comparison
-
-Placeholder for a controlled comparison using identical models, hints, ranges, and final weights:
-
-```markdown
-![Orchestrator Advanced Result](../assets/workflows/example_orchestrator_advanced_01.png)
-![Apply Advanced Composition Result](../assets/workflows/example_composition_01.png)
-```
-
-The expected purpose is to demonstrate the near-identical inference behavior of the two interfaces when configured with equivalent effective controls.
-
-### Union Pro versus smaller Union model
-
-Placeholder for a normal-VRAM comparison that records runtime, physical VRAM, staged size, and image result without contamination from forced `--lowvram`:
-
-```markdown
-![Union Pro Result](../assets/workflows/example_union_pro_01.png)
-![Shakker Union Result](../assets/workflows/example_shakker_union_01.png)
-```
+[Download PNG](../assets/workflows/Release_2.0/jlc_ControlNet_Composition.png)
+[Download JSON](../assets/workflows/Release_2.0/jlc_ControlNet_Composition.json)
 
 ---
 

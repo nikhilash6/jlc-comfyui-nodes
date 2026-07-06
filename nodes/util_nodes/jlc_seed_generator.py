@@ -89,7 +89,7 @@ class JLC_SeedGenerator:
     """Shared seed source with frontend-restored stable base seed display."""
 
     FUNCTION = "generator"
-    CATEGORY = "JLC/utils"
+    CATEGORY = "utils/seed"
 
     RETURN_TYPES = ("SEED", "INT")
     RETURN_NAMES = ("seed", "seed_int")

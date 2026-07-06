@@ -258,16 +258,7 @@ The broad options may cause later nodes to reload models, which can increase exe
 
 ## Example Workflows
 
-Detailed utility workflow examples will be added shortly.
-
-Planned examples:
-
-- shared seed feeding two samplers;
-- seed generator in a multi-stage partial-denoise workflow;
-- stage-boundary cleanup between a ControlNet-heavy first stage and a second sampler;
-- compact showcase workflow combining the Seed Generator, dynamic LoRA loaders, ControlNet Aux preprocessing, and ControlNet composition/orchestration.
-
-Workflow will be added shortly.
+These are not standalone use nodes; to see examples of use, consult workflows in other sections of this repository. 
 
 ---
 

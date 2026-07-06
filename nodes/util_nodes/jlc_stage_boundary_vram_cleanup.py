@@ -332,7 +332,7 @@ class JLC_StageBoundaryVRAMCleanup:
     """Latent-triggered stage-boundary VRAM cleanup passthrough node."""
 
     FUNCTION = "cleanup"
-    CATEGORY = "JLC/utils"
+    CATEGORY = "utils/VRAM"
     RETURN_TYPES = ("LATENT",)
     RETURN_NAMES = ("latent",)
 

@@ -329,17 +329,12 @@ Use MODEL+CLIP variants only when CLIP/text-encoder patching is desired.
 
 ## Example Workflows
 
-Detailed LoRA workflow examples will be added shortly.
+LoRA loader nodes family
 
-Planned examples:
+![LoRA loaders](../assets/workflows/Release_2.0/jlc_LoRA_loaders.png)
 
-- basic dynamic MODEL-only LoRA stack;
-- MODEL+CLIP dynamic LoRA stack;
-- shared block-weight LoRA stack;
-- per-slot block-weight LoRA stack;
-- compact showcase workflow combining dynamic LoRA loading with the JLC Seed Generator and ControlNet nodes.
-
-Workflow will be added shortly.
+[Download PNG](../assets/workflows/Release_2.0/jlc_LoRA_loaders.png) .
+[Download JSON](../assets/workflows/Release_2.0/jlc_LoRA_loaders.json)
 
 ---
 

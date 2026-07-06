@@ -1,0 +1,1116 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+\usepackage{microtype}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+\usepackage{xurl}
+
+\definecolor{codebg}{RGB}{247,248,250}
+\definecolor{codeframe}{RGB}{210,214,220}
+\definecolor{codecomment}{RGB}{75,120,75}
+\definecolor{codekeyword}{RGB}{40,75,150}
+\definecolor{codestring}{RGB}{150,70,55}
+\definecolor{accent}{RGB}{35,84,135}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=accent,
+  citecolor=accent,
+  urlcolor=accent,
+  pdftitle={From Recursive Chains to Explicit Linearized Fusion: Non-Recursive Multi-ControlNet Composition in ComfyUI},
+  pdfauthor={Jose Luis Cordova}
+}
+
+\lstdefinestyle{pythonstyle}{
+  language=Python,
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{codekeyword}\bfseries,
+  commentstyle=\color{codecomment}\itshape,
+  stringstyle=\color{codestring},
+  backgroundcolor=\color{codebg},
+  frame=single,
+  rulecolor=\color{codeframe},
+  breaklines=true,
+  breakatwhitespace=false,
+  showstringspaces=false,
+  tabsize=4,
+  columns=fullflexible,
+  keepspaces=true,
+  xleftmargin=0.5em,
+  xrightmargin=0.5em,
+  aboveskip=0.8em,
+  belowskip=0.8em
+}
+
+\lstdefinestyle{textstyle}{
+  basicstyle=\ttfamily\footnotesize,
+  backgroundcolor=\color{codebg},
+  frame=single,
+  rulecolor=\color{codeframe},
+  breaklines=true,
+  showstringspaces=false,
+  columns=fullflexible,
+  keepspaces=true,
+  xleftmargin=0.5em,
+  xrightmargin=0.5em,
+  aboveskip=0.8em,
+  belowskip=0.8em
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{JLC Non-Recursive ControlNet}
+\rhead{Flux.1 Technical Freeze Paper}
+\cfoot{\thepage}
+\setlength{\headheight}{14pt}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.65em}
+\setlist[itemize]{topsep=0.35em,itemsep=0.25em,parsep=0pt}
+\setlist[enumerate]{topsep=0.35em,itemsep=0.25em,parsep=0pt}
+\emergencystretch=3em
+
+\newcommand{\FluxOne}{\textsc{Flux.1}}
+\newcommand{\FluxTwo}{\textsc{Flux.2}}
+\newcommand{\ComfyUI}{\textsc{ComfyUI}}
+\newcommand{\JLC}{\textsc{JLC}}
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\freeze}{\textbf{Frozen milestone}}
+
+\title{\textbf{From Recursive Chains to Explicit Linearized Fusion}\\[0.25em]
+\Large Non-Recursive Multi-ControlNet Composition in \ComfyUI{} for \FluxOne{} Workflows\\[0.65em]
+\large Origin Question, Execution Theory, Architecture, Validation, and Release 2.0 Freeze Record}
+\author{Jos\'e Luis C\'ordova}
+\date{6 July 2026}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This paper documents the first \JLC{} non-recursive ControlNet effort: the investigation that began with a practical question---why did adding a second ControlNet Apply stage to a demanding \FluxOne{} workflow produce disproportionately longer execution and greater memory pressure than using one?---and evolved into a general architecture for explicit linearized multi-ControlNet fusion in \ComfyUI{}.
+
+The investigation began by separating the user-facing Apply graph from the sampler-facing execution structure. Native Apply nodes do not merely place unrelated controls beside one another. Each new ControlNet is copied, conditioned, and linked through \code{previous\_controlnet}. During sampling, the newest ControlNet recursively requests the output of its predecessor before evaluating and merging its own residuals. This native mechanism is correct and remains useful, especially for one ControlNet. It is also a nested ownership model: model discovery, hook traversal, preparation, cleanup, hint preparation, residual production, and residual merging all follow the linked chain.
+
+The initial hypothesis was that this recursive structure itself explained the observed runtime and memory collapse. The research produced a valuable architecture, but later compatibility and VRAM analysis refined the diagnosis. Native recursion evaluates each child once and is linear in the number of controls; it is not an exponential algorithm. The severe pathological slowdown was traced primarily to forced \code{--lowvram} behavior interacting with large Flux models, lazy ControlNet hint/VAE preparation, extensive LoRA patching, and destructive partial unload/reload cycles. Nevertheless, recursive merge semantics still impose avoidable tensor-lifetime, allocation, state-inheritance, and reasoning costs. The non-recursive design remains valuable because it makes those costs explicit and controllable.
+
+The final architecture extracts or directly prepares child ControlNets, creates shallow isolated copies, clears every child’s \code{previous\_controlnet}, evaluates all active children independently against the same sampler state, and performs explicit weighted streaming fusion. The first owned tensor is cloned and optionally scaled; later residuals are added in place with \code{dst.add\_(value, alpha=weight)}. One ControlNet-compatible wrapper is exposed to the sampler. Unique child models, hooks, preparation, cleanup, and inference-memory requirements are forwarded through current \ComfyUI{} interfaces. A mathematically equivalent single ControlNet at final weight one is routed through the native path rather than through the wrapper.
+
+The architecture supports three workflow interfaces with one fusion theory: Composition linearizes an existing native chain; Orchestrator accepts external ControlNet objects and prepares independent slots; Orchestrator Advanced performs internal model selection, strict preflight, shared-cache reuse, dynamic slot management, and per-run copy isolation. Current validation on an RTX 4090 Laptop with 16~GB VRAM demonstrated stable heavy \FluxOne{} workloads with Union Pro ControlNet, 304 attached LoRA patches, repeated or distinct controls, and as many as four active slots, without model-unload cascades during sampling. Representative 35-step runs completed in approximately 188--202 seconds, while an upper comfort-limit 3.15-megapixel, 50-step run completed in 31:03 sampling time without a full-model unload/reload cascade.
+
+The release 2.0 freeze therefore preserves both parts of the lesson: explicit non-recursive linearization is a useful execution and ownership model, but it must cooperate with rather than replace \ComfyUI{} model management. The community contribution is not the claim that recursion is inherently defective. It is a precise alternative formulation for multi-ControlNet residual fusion, accompanied by a corrected understanding of performance, memory residency, hint preparation, caching, and DynamicVRAM behavior.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+\section{Purpose and Contribution}
+
+This companion paper records the theory and engineering history behind the \JLC{} ControlNet Composition and Orchestrator family for \FluxOne{}-oriented \ComfyUI{} workflows. It is intentionally broader than user documentation. The goal is to explain:
+
+\begin{itemize}
+  \item the original performance question;
+  \item the exact native recursive execution structure that the question exposed;
+  \item the distinction between recursive control flow, computational complexity, tensor lifetime, and model residency;
+  \item the evolution from chain flattening to an explicit reusable fusion core;
+  \item the reasons for shallow copy, detached linkage, owned-output cloning, and in-place later accumulation;
+  \item the relationship among Apply, Composition, Orchestrator, and Orchestrator Advanced;
+  \item the corrected diagnosis of pathological low-VRAM behavior;
+  \item the validation evidence and remaining limits; and
+  \item the release 2.0 technical freeze contract.
+\end{itemize}
+
+The paper focuses on \FluxOne{} because that was the workload that exposed the problem and supplied the most demanding validation environment. The core abstraction is not limited to one ControlNet architecture. It composes any compatible \ComfyUI{} ControlNet-like objects whose \code{get\_control()} outputs follow the native residual dictionary/list structure.
+
+\section{The Origin Question}
+
+The research began with a deceptively simple observation:
+
+\begin{quote}
+Why does a workflow with two ControlNet Apply stages take so much longer and create so much more memory pressure than the same workflow with one?
+\end{quote}
+
+A naive expectation is approximately linear scaling. If one ControlNet requires one additional model evaluation per denoising step, two should require roughly two. Some overhead is expected from a second hint image, a second model, and a second set of residual tensors. The observed behavior, however, could be far more severe and variable. In demanding \FluxOne{} workflows, the second or third control could coincide with long pauses, aggressive offload activity, VAE or AutoencodingEngine preparation, low-VRAM weight-patch handling, and occasionally catastrophic runtime growth.
+
+The user-facing graph did not explain the behavior. Two Apply nodes look like two ordinary stages. The decisive insight was that the graph is transformed into a linked sampler object before sampling begins.
+
+\section{Native \ComfyUI{} ControlNet Semantics}
+
+\subsection{Apply builds a linked chain}
+
+A native-style Apply node copies the supplied base ControlNet, applies per-run hint and timing state, retrieves any ControlNet already attached to the conditioning row, and links the new copy to it:
+
+\begin{lstlisting}[style=pythonstyle,caption={Native-style chain construction preserved by JLC Apply.}]
+d = conditioning_metadata.copy()
+prev_cnet = d.get("control", None)
+
+c_net = (
+    control_net.copy()
+    .set_cond_hint(
+        control_hint,
+        strength,
+        (start_percent, end_percent),
+        vae,
+    )
+)
+c_net.set_previous_controlnet(prev_cnet)
+d["control"] = c_net
+\end{lstlisting}
+
+After three Apply stages, the conditioning metadata points to the newest object, which points to the previous object, which points to the oldest:
+
+\begin{figure}[H]
+\centering
+\fbox{\begin{minipage}{0.86\textwidth}
+\centering\ttfamily\small
+conditioning["control"] $\rightarrow$ C3 $\rightarrow$ C2 $\rightarrow$ C1 $\rightarrow$ None
+\end{minipage}}
+\caption{Native \code{previous\_controlnet} linkage after three Apply stages.}
+\end{figure}
+
+The Apply stage is therefore a chain builder, not a fusion stage.
+
+\subsection{Sampling traverses the chain recursively}
+
+The core ControlNet evaluation pattern is structurally equivalent to:
+
+\begin{lstlisting}[style=pythonstyle,caption={Simplified native recursive evaluation.}]
+def get_control(self, x_noisy, t, cond, batched_number, transformer_options):
+    control_prev = None
+    if self.previous_controlnet is not None:
+        control_prev = self.previous_controlnet.get_control(
+            x_noisy, t, cond, batched_number, transformer_options
+        )
+
+    control_current = self.control_model(...)
+    return self.control_merge(control_current, control_prev)
+\end{lstlisting}
+
+The oldest child is reached first. Its residuals return to the next child, whose own model executes and merges with the previous result. The aggregate then returns to the next level.
+
+For three controls, the precise conceptual flow is not literally a composition of latent transforms such as $C_3(C_2(C_1(x)))$. The controls all receive the same sampler state $x$; what is recursively nested is residual production and merge ownership. A more accurate recurrence is:
+
+\[
+R_1 = M_1\!\left(C_1(x),\,0\right),
+\]
+
+\[
+R_2 = M_2\!\left(C_2(x),\,R_1\right),
+\]
+
+\[
+R_3 = M_3\!\left(C_3(x),\,R_2\right),
+\]
+
+where $C_i(x)$ is the current child output and $M_i$ is the native strength/application/merge operation at that chain level.
+
+\subsection{The native chain is linear, not exponential}
+
+A key correction from the later investigation is that native recursion does not automatically mean repeated exponential evaluation. For $n$ active ControlNets, the ordinary chain evaluates approximately $n$ ControlNet models per denoising call. Its model-forward complexity is $O(n)$, just like a sequential flat loop.
+
+The useful question is therefore not:
+
+\begin{quote}
+Does recursion cause the same ControlNet to execute exponentially many times?
+\end{quote}
+
+It is:
+
+\begin{quote}
+What additional ownership, allocation, lifetime, model-management, preparation, and scheduling behavior follows from the nested chain representation?
+\end{quote}
+
+That distinction is central to the final theory.
+
+\section{Why Multiple Native Apply Stages Can Feel Disproportionately Expensive}
+
+\subsection{The unavoidable cost}
+
+Two active ControlNets do require two side-model evaluations. No composition wrapper can make two distinct control conditions cost the same as one without approximating or skipping work. The unavoidable costs include:
+
+\begin{itemize}
+  \item each child model’s forward pass;
+  \item each child’s ControlNet residual tensors;
+  \item hint preprocessing and possible latent-format conversion;
+  \item VAE or AutoencodingEngine encoding where required;
+  \item model weights or dynamically staged model material; and
+  \item any independent activation range and per-step control logic.
+\end{itemize}
+
+A correct comparison must begin from this baseline.
+
+\subsection{Recursive merge creates extra tensor-lifetime pressure}
+
+At each recursive level, the previous aggregate must remain alive while the current child runs and while a new merge result is produced. The native merge path historically used out-of-place addition for overlapping entries:
+
+\begin{lstlisting}[style=pythonstyle,caption={Conceptual native merge allocation.}]
+if current_value is None:
+    current_value = previous_value
+else:
+    current_value = previous_value + current_value
+\end{lstlisting}
+
+At one merge point, memory can temporarily include:
+
+\begin{itemize}
+  \item the previous aggregate $R_{1\ldots i-1}$;
+  \item the current child output $C_i(x)$; and
+  \item the newly allocated aggregate $R_{1\ldots i}$.
+\end{itemize}
+
+Python recursion itself is not the significant memory cost. The large residual tensors and their liveness are.
+
+\subsection{Strength application and shared-tensor safety complicate ownership}
+
+Native ControlNet output dictionaries can contain lists with \code{None} entries, shared tensor references, different lengths, and architecture-specific keys. The native merge path must avoid applying strength more than once to shared tensors and cannot always assume in-place ownership. This favors conservative merge behavior.
+
+A flat composer can define a stronger ownership contract: never mutate child output; clone only when the composite first takes ownership; then mutate only composite-owned storage.
+
+\subsection{Recursive lifecycle traversal}
+
+The linked structure is traversed not only by \code{get\_control()} but also by lifecycle and discovery methods such as:
+
+\begin{itemize}
+  \item \code{get\_models()};
+  \item \code{get\_extra\_hooks()};
+  \item \code{pre\_run()};
+  \item \code{cleanup()}; and
+  \item inference-memory reporting.
+\end{itemize}
+
+A well-behaved native chain handles this correctly. However, custom wrappers must implement the complete surface. Omitting deduplication, forwarding, or cleanup can produce duplicated model registrations, stale hint state, incorrect memory estimates, or subtle incompatibility after upstream changes.
+
+\subsection{Lazy hint preparation can coincide at activation boundaries}
+
+ControlNet hints are commonly prepared lazily, inside the first active \code{get\_control()} call at the required latent size. For Flux ControlNets, this can invoke a VAE or AutoencodingEngine and restore previously active model residency afterward.
+
+When several controls become active at the same denoising boundary, one step can therefore include:
+
+\begin{itemize}
+  \item multiple hint resizes;
+  \item one or more VAE encodes;
+  \item latent-format conversion;
+  \item ControlNet model preparation; and
+  \item model-manager decisions under already high VRAM pressure.
+\end{itemize}
+
+This is valid native behavior, but it explains why the transition from one to two controls can look nonlinear in a constrained system.
+
+\subsection{Model residency is not the sum of staged sizes}
+
+DynamicVRAM logs can report, for example, a 6.3~GB ControlNet and a 22.7~GB Flux model as staged at the same time on a 16~GB GPU. These logical staged sizes are not simultaneous physical occupancy. They describe model material prepared for dynamic loading and patching. The model manager keeps only working portions resident.
+
+Interpreting staged sizes as a simple sum leads to incorrect conclusions. The relevant evidence is actual unload/reload behavior, step timing, low-VRAM patch count, and stability.
+
+\subsection{Forced low-VRAM mode was the dominant pathological confounder}
+
+The later v2.0.0 audit established that the most dramatic runtime collapse was primarily caused by launching \ComfyUI{} with forced \code{--lowvram}. Under that mode, hint-preparation boundaries and large LoRA-patched Flux models could trigger destructive partial unload/reload cycles and deferred weight-patch handling.
+
+This produced highly variable behavior ranging from roughly twelve minutes to extreme multi-hour cases in pathological tests. Those runs cannot be used as clean proof that recursive ControlNet chaining itself is catastrophically inefficient.
+
+The corrected conclusion is:
+
+\begin{quote}
+The original question correctly exposed a difficult interaction among multiple controls, residual ownership, hint preparation, and model residency. The non-recursive architecture solved real ownership and predictability problems. The most extreme slowdown, however, was dominated by forced low-VRAM behavior rather than by recursive asymptotic complexity.
+\end{quote}
+
+\section{Research Methodology and Historical Evolution}
+
+\subsection{Phase 1: native Apply and cache discipline}
+
+The earliest public \JLC{} node preserved native Apply semantics while improving graph ergonomics. Apply Advanced added optional internal model selection, hard bypass for disabled or zero-strength stages, session-level cache reuse, and per-run copies. This phase established two principles that later became essential:
+
+\begin{enumerate}
+  \item a cached base model must remain unconditioned; and
+  \item hint, strength, schedule, and chain linkage belong to a per-run copy.
+\end{enumerate}
+
+\subsection{Phase 2: chain extraction and first Composition release}
+
+The first Composition node treated the completed native chain as input data. It traversed \code{previous\_controlnet}, reversed the resulting newest-to-oldest traversal into oldest-to-newest order, shallow-copied each member, cleared the links, and exposed one wrapper to the sampler.
+
+The initial public performance study used three controls at 1024 by 1536 pixels on an RTX 4090 Laptop: OpenPose, HED, and Depth with Union Pro, a 35-step Flux workflow, and 16-bit major components. Historical release notes reported approximately 2.5-times lower average runtime and approximately five-times lower runtime variance than the recursive baseline in that controlled test. This was evidence that the flattened implementation was practical and promising, not a universal complexity theorem.
+
+\subsection{Phase 3: deterministic streaming fusion and explicit synchronization}
+
+A subsequent release refined the implementation into streaming tensor fusion and added explicit CUDA synchronization after each child. Synchronization was useful during early investigation because it made child completion, ownership, and release behavior easier to observe and reduced ambiguity from asynchronous execution.
+
+It was later recognized as too expensive for the normal path. In the v2 core, synchronization is disabled by default and retained only as an environment-controlled diagnostic:
+
+\begin{lstlisting}[style=textstyle]
+$env:JLC_CONTROLNET_SYNC_AFTER_CHILD = "1"
+\end{lstlisting}
+
+\subsection{Phase 4: Orchestrator interfaces}
+
+Composition required users to build a native chain first and then flatten it. The Orchestrator family removed that construction step:
+
+\begin{itemize}
+  \item the external Orchestrator accepts ControlNet objects from loaders;
+  \item the Advanced Orchestrator selects registered files internally;
+  \item each active slot creates an isolated conditioned copy; and
+  \item all prepared children are passed directly to the same fusion core.
+\end{itemize}
+
+This separated model sourcing and user interface from execution mathematics.
+
+\subsection{Phase 5: v2.0.0 compatibility and performance audit}
+
+The current freeze followed a full audit against modern \ComfyUI{} sampler, model-management, hook, inference-memory, and MultiGPU-related interfaces. The pass corrected real defects and removed misleading assumptions:
+
+\begin{itemize}
+  \item shared core rather than divergent Composition and Orchestrator math;
+  \item strict shallow-copy policy and removal of \code{deepcopy};
+  \item unique model discovery by object identity;
+  \item full lifecycle and hook forwarding;
+  \item sequential scratch-memory reporting as a maximum, not a sum;
+  \item native single-ControlNet routing when mathematically equivalent;
+  \item default removal of mandatory per-child CUDA synchronization;
+  \item strict preflight before internal model loading;
+  \item shared cache ownership of raw bases only;
+  \item current single-device compatibility shunts; and
+  \item explicit refusal to claim real MultiGPU cloning.
+\end{itemize}
+
+A severe slowdown that triggered the audit was ultimately traced mainly to forced \code{--lowvram}. A separate Composition import defect was real but had been introduced only during the final refactor immediately before testing. Other lifecycle and cache issues found in the audit were also real and were corrected.
+
+\section{The Linearized Mathematical Model}
+
+\subsection{Independent operators}
+
+Let active child ControlNets be indexed by $i$. Every child receives the same sampler state:
+
+\[
+x = (x_{\mathrm{noisy}}, t, \mathrm{cond}, b, \mathrm{transformer\ options}).
+\]
+
+Each child produces a residual structure:
+
+\[
+C_i(x) = \left\{K \mapsto [r_{i,K,0}, r_{i,K,1}, \ldots]\right\},
+\]
+
+where keys commonly include \code{input}, \code{middle}, and \code{output}, but the composer does not assume that every child provides every key or every position.
+
+The explicit fused output is:
+
+\[
+R(x) = \sum_{i=0}^{n-1} W_i C_i(x).
+\]
+
+The sum is interpreted elementwise over matching keys and list positions, ignoring \code{None} values and creating positions when first introduced by a later child.
+
+\subsection{User weight and order bias}
+
+Nodes that expose the order-bias parameter $\alpha$ use:
+
+\[
+W_i = w_i \alpha^i,
+\]
+
+where $w_i$ is the slot or extracted-chain weight and $i$ is the original zero-based position.
+
+Important semantics follow:
+
+\begin{itemize}
+  \item $\alpha=1$ gives neutral positional weighting;
+  \item $0<\alpha<1$ favors earlier positions;
+  \item $\alpha>1$ favors later positions;
+  \item negative $w_i$ values are supported;
+  \item Orchestrators may permit negative $\alpha$, producing alternating signs; and
+  \item skipped slots retain their original exponent rather than renumbering later slots.
+\end{itemize}
+
+At $\alpha=1$, the mathematical sum is order-invariant. Floating-point accumulation order can still create tiny numerical differences, so practical ``invariance'' means no systematic semantic order bias rather than bitwise commutativity across arbitrary reorderings.
+
+\subsection{What is and is not linearized}
+
+The composer does not linearize the internal transformer computation of a ControlNet. Each $C_i$ remains a full nonlinear neural network. The linearization occurs at the residual-output aggregation boundary:
+
+\[
+\text{nonlinear child models} \quad \longrightarrow \quad \text{linear weighted residual sum}.
+\]
+
+The architecture changes how outputs are owned and merged, not how each ControlNet interprets its hint or conditioning.
+
+\section{Core Implementation}
+
+\subsection{Chain extraction}
+
+Composition begins with the ControlNet attached to conditioning and traverses the native links. Object identity is tracked to avoid an infinite loop if a malformed cycle exists:
+
+\begin{lstlisting}[style=pythonstyle,caption={Oldest-to-newest native-chain extraction.}]
+def extract_controlnet_chain(cnet):
+    chain = []
+    visited = set()
+    while cnet is not None and id(cnet) not in visited:
+        chain.append(cnet)
+        visited.add(id(cnet))
+        cnet = getattr(cnet, "previous_controlnet", None)
+    chain.reverse()
+    return chain
+\end{lstlisting}
+
+Oldest-to-newest order matters because chain weight row 1 and $\alpha^0$ correspond to the oldest member.
+
+\subsection{Shallow detachment}
+
+Every extracted child is isolated with \code{copy.copy()}, not \code{deepcopy}:
+
+\begin{lstlisting}[style=pythonstyle,caption={Shallow detachment.}]
+def make_detached_chain(chain):
+    detached = []
+    for cnet in chain:
+        c_copy = copy.copy(cnet)
+        c_copy.previous_controlnet = None
+        c_copy.multigpu_clones = {}
+        detached.append(c_copy)
+    return detached
+\end{lstlisting}
+
+The copy is intentionally shallow because the large underlying model patcher and weights should remain shared. Only mutable per-object chain linkage and compatibility bookkeeping need isolation.
+
+Deep copying would be both semantically wrong and operationally dangerous: it could duplicate model structures, break patcher ownership, consume large amounts of RAM/VRAM, and bypass the host model manager.
+
+\subsection{The sampler-facing wrapper}
+
+The sampler receives one \code{JLC\_ComposedControlNet} object. It owns lists of detached children and final weights and presents a ControlNet-compatible surface:
+
+\begin{lstlisting}[style=pythonstyle,caption={Essential wrapper state.}]
+class JLC_ComposedControlNet:
+    def __init__(self, controlnets, weights):
+        self.controlnets = list(controlnets)
+        self.weights = list(weights)
+        self.previous_controlnet = None
+        self.extra_hooks = None
+        self.multigpu_clones = {}
+\end{lstlisting}
+
+The wrapper is not a neural model. It is a lifecycle and residual-aggregation owner.
+
+\subsection{Streaming tensor fusion}
+
+The first child output that contributes to a given key and list position is cloned. That clone becomes composite-owned storage:
+
+\begin{lstlisting}[style=pythonstyle,caption={First-output ownership.}]
+owned = value.clone()
+if weight != 1.0:
+    owned.mul_(weight)
+combined[key][index] = owned
+\end{lstlisting}
+
+Later outputs are accumulated in place:
+
+\begin{lstlisting}[style=pythonstyle,caption={Later weighted accumulation.}]
+dst = combined[key][index]
+if dst is None:
+    owned = value.clone()
+    if weight != 1.0:
+        owned.mul_(weight)
+    combined[key][index] = owned
+else:
+    dst.add_(value, alpha=weight)
+\end{lstlisting}
+
+This implements the central ownership rule:
+
+\begin{quote}
+Never mutate child-owned output. Clone only when the composite first takes ownership. Mutate only composite-owned storage afterward.
+\end{quote}
+
+The implementation tolerates child \code{None} returns, \code{None} entries, keys introduced by later children, differing list lengths, zero weights, and absent children.
+
+\subsection{Tensor-liveness comparison}
+
+For one residual slot, a recursive out-of-place merge can temporarily require:
+
+\[
+\text{previous aggregate} + \text{current child output} + \text{new aggregate}.
+\]
+
+Streaming in-place composition requires approximately:
+
+\[
+\text{owned accumulator} + \text{current child output}.
+\]
+
+This is not a universal closed-form VRAM reduction because model weights, attention scratch, allocator behavior, and architecture-specific output sizes dominate many workflows. It is, however, a concrete reduction in avoidable merge allocation and output lifetime.
+
+\subsection{Model discovery and identity deduplication}
+
+The sampler sees one wrapper, but \ComfyUI{} must still manage every real child model. The wrapper aggregates child model lists and deduplicates by object identity:
+
+\begin{lstlisting}[style=pythonstyle,caption={Unique child model discovery.}]
+def get_models(self):
+    models = []
+    for cnet in self.controlnets:
+        models += cnet.get_models()
+    return unique_by_identity(models)
+\end{lstlisting}
+
+This is particularly important when several slots use shallow copies of the same cached base model. There may be multiple conditioned control objects but only one underlying model patcher.
+
+\subsection{Hooks and lifecycle forwarding}
+
+The wrapper forwards:
+
+\begin{itemize}
+  \item \code{get\_extra\_hooks()} to every child;
+  \item \code{pre\_run()} to every child;
+  \item \code{cleanup()} once per unique child object;
+  \item \code{get\_models\_only\_self()} to the deduplicated model list;
+  \item \code{copy()} as a shallow wrapper copy; and
+  \item \code{get\_instance\_for\_device()} as a single-device compatibility shunt.
+\end{itemize}
+
+The wrapper reports the maximum child temporary inference-memory requirement, not the sum:
+
+\[
+M_{\mathrm{scratch}}^{\mathrm{wrapper}} = \max_i M_{\mathrm{scratch}}^{(i)}.
+\]
+
+Because children execute sequentially, summing scratch estimates would falsely claim all temporary workspaces must coexist. Child model weights remain separately discoverable through \code{get\_models()}.
+
+\subsection{Native single-ControlNet routing}
+
+The routing helper classifies the effective active set:
+
+\begin{table}[H]
+\centering
+\caption{Routing policy.}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+Effective active controls & Route \\
+\midrule
+None & Conditioning passes through unchanged. \\
+One at final weight 1.0 & Native single-ControlNet path. \\
+One at a non-unit final weight & Composed wrapper, preserving the declared scalar exactly. \\
+Two or more & Composed wrapper. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The native single path is not a reluctant fallback. It is the preferred design whenever the composed and native mathematics are equivalent. It avoids wrapper overhead and preserves the most direct \ComfyUI{} behavior.
+
+If incoming conditioning already contains a prior ControlNet, native single routing reconnects it with \code{set\_previous\_controlnet(prev\_cnet)}.
+
+\section{Three Interfaces, One Theory}
+
+\subsection{JLC ControlNet Composition}
+
+Composition is the original cornerstone and modular interface. Users build an ordinary native chain with Apply nodes, then place Composition before the sampler:
+
+\begin{figure}[H]
+\centering
+\fbox{\begin{minipage}{0.9\textwidth}
+\centering\ttfamily\small
+Apply Advanced $\rightarrow$ Apply Advanced $\rightarrow$ Apply Advanced\\
+$\downarrow$\\
+Composition: extract $\rightarrow$ clip $\rightarrow$ detach $\rightarrow$ weight $\rightarrow$ one wrapper\\
+$\downarrow$\\
+Sampler
+\end{minipage}}
+\caption{Modular chain-building followed by explicit linearization.}
+\end{figure}
+
+Composition supports dynamic weight rows, chain clipping, order bias, diagnostics, and replacement reuse between matching positive and negative conditioning rows.
+
+This interface is not deprecated by Orchestrator Advanced. It remains ideal when explicit Apply stages, pass-through wiring, external sourcing, or separate graph-level control are desirable.
+
+\subsection{JLC ControlNet Orchestrator}
+
+The external-input Orchestrator receives ControlNet objects from visible upstream loaders. For each active slot, it:
+
+\begin{enumerate}
+  \item resolves the ControlNet object;
+  \item receives the hint image and timing/strength settings;
+  \item creates an isolated per-run copy;
+  \item applies native \code{set\_cond\_hint()}; and
+  \item delegates children and weights to the shared core.
+\end{enumerate}
+
+It is the correct interface for custom loaders, nonstandard locations, shared workflow branches, dynamically modified ControlNets, or specialized device/precision policy.
+
+\subsection{JLC ControlNet Orchestrator Advanced}
+
+Orchestrator Advanced is the integrated interface for ordinary registered ControlNet files. It adds:
+
+\begin{itemize}
+  \item dynamic visible slots;
+  \item internal file selectors;
+  \item \code{DISABLED} and \code{SHARE\_PREVIOUS} semantics;
+  \item strict whole-node preflight before any load;
+  \item shared family-scoped LRU cache reuse;
+  \item per-slot image, strength, range, and weight;
+  \item bounded cache capacity; and
+  \item the same final fusion core as Composition and external Orchestrator.
+\end{itemize}
+
+The shared cache stores only raw base ControlNet objects. It never stores a hint, activation range, previous chain, or other per-run state. Every active slot creates a fresh conditioned copy.
+
+\subsection{Apply remains intentionally native}
+
+The \JLC{} Apply nodes preserve \ComfyUI{} chain semantics. They are useful on their own and are the natural chain-building stages for modular Composition workflows. Apply Advanced does not silently perform non-recursive fusion; Composition is the explicit linearization boundary.
+
+Keeping these concepts separate prevents a dangerous ambiguity where an Apply node sometimes constructs a native chain and sometimes flattens it without the graph making the change visible.
+
+\section{Caching, Preflight, and Per-Run State}
+
+\subsection{Raw bases versus conditioned copies}
+
+A ControlNet object can contain both heavy shared model ownership and mutable per-run state. The final cache discipline separates them:
+
+\begin{figure}[H]
+\centering
+\fbox{\begin{minipage}{0.88\textwidth}
+\centering\ttfamily\small
+registered checkpoint\\
+$\downarrow$ load or cache reuse\\
+raw base ControlNet + shared model patcher\\
+$\downarrow$ copy()\\
+per-slot conditioned ControlNet\\
+$\downarrow$ detached flat fusion
+\end{minipage}}
+\caption{Shared base ownership and per-run mutable state.}
+\end{figure}
+
+This permits repeated use of one model with different images, strengths, or schedules without contaminating the cached object.
+
+\subsection{Hard bypass and strict preflight}
+
+Inactive stages should not load models. Apply Advanced returns before model resolution when disabled or at zero strength. Orchestrator Advanced determines the active slot set before touching the cache.
+
+A slot is inactive when its selector is disabled, strength is zero, weight is zero, or its range is empty. An otherwise active slot with no image raises a clear error before model loading. \code{SHARE\_PREVIOUS} must resolve to an earlier named model.
+
+This order matters on a 16~GB system: validation failure should not leave one or more large ControlNets resident.
+
+\section{Validation and Performance Evidence}
+
+\subsection{Historical Composition benchmark}
+
+The first public Composition benchmark used:
+
+\begin{table}[H]
+\centering
+\caption{Historical three-ControlNet benchmark configuration.}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+Item & Configuration \\
+\midrule
+Base workflow & \FluxOne{}-dev-oriented, 16-bit major components \\
+ControlNet & FLUX.1-dev-ControlNet-Union-PRO \\
+Controls & OpenPose, HED, Depth \\
+Resolution & $1024\times1536$ \\
+Sampling & 35 steps, CFG approximately 2.1 \\
+Hardware & RTX 4090 Laptop, 16~GB VRAM \\
+Method & Repeated randomized runs and repeated seeds \\
+Historical observation & Approximately 2.5-times faster average runtime and five-times lower variance than the tested recursive baseline \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The result motivated continued development. The later low-VRAM investigation means it should be read as workflow evidence, not as proof that flat fusion is always 2.5-times faster than native recursion.
+
+\subsection{Current heavy benchmark: standard heavy Flux base}
+
+A v2-era modular Apply Advanced $\rightarrow$ Composition benchmark produced:
+
+\begin{table}[H]
+\centering
+\caption{Representative validated 35-step benchmark.}
+\begin{tabular}{@{}lr@{}}
+\toprule
+Metric & Result \\
+\midrule
+ControlNetFlux staged size & 6,297~MB \\
+Flux staged size & 11,350~MB \\
+Attached LoRA patches & 304 \\
+Sampling steps & 35 \\
+Sampling time & approximately 188~s \\
+Total prompt time & 197.97~s \\
+Full-model unload events during sampling & 0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Heavier base model: FLUX\_SRPO\_bf16}
+
+Keeping the toolchain and benchmark otherwise consistent while using one of the heaviest routinely used \FluxOne{} bases produced:
+
+\begin{table}[H]
+\centering
+\caption{Representative heavy-base benchmark.}
+\begin{tabular}{@{}lr@{}}
+\toprule
+Metric & Result \\
+\midrule
+ControlNetFlux staged size & 6,297~MB \\
+Flux staged size & 22,700~MB \\
+Attached LoRA patches & 304 \\
+Sampling steps & 35 \\
+Sampling time & approximately 202~s \\
+Total prompt time & 224.63~s \\
+Full-model unload events during sampling & 0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Although the logical staged Flux size roughly doubled, total prompt time increased by only about 26.7 seconds. AutoencodingEngine preparation occurred afterward without a destructive model unload cascade.
+
+\subsection{Upper comfort-limit stress test}
+
+The practical upper comfort-limit test for the classic modular Composition workflow used:
+
+\begin{itemize}
+  \item resolution $1448\times2176$, approximately 3.15 megapixels;
+  \item 50 sampling steps;
+  \item \code{FLUX\_SRPO\_bf16};
+  \item Union Pro ControlNet, approximately 6,297~MB staged;
+  \item Flux model, approximately 22,700~MB staged;
+  \item 304 attached LoRA patches;
+  \item multiple ControlNet uses, with one disabled;
+  \item HED, DSINE, and DWPose preprocessing; and
+  \item normal VRAM mode with DynamicVRAM on the 16~GB RTX 4090 Laptop.
+\end{itemize}
+
+The result was 31:03 sampling time, 31:15 total prompt time, approximately 37.28 seconds per iteration, no full-model unload during sampling, and a 159~MB AutoencodingEngine staged afterward. The generated result was described as spectacular and photo-like.
+
+This test represents a performance cliff or practical comfort boundary, not a recommended routine resolution. Its significance is that the system remained architecturally stable rather than falling into the earlier forced-low-VRAM unload/reload pathology.
+
+\subsection{Orchestrator stress tests}
+
+Additional Orchestrator Advanced runs exercised:
+
+\begin{itemize}
+  \item repeated and distinct ControlNet models;
+  \item more LoRAs;
+  \item as many as four ControlNet uses;
+  \item overlapping and non-overlapping activation ranges; and
+  \item the same 16~GB GPU.
+\end{itemize}
+
+Performance remained steady at comparable speeds. This supports the claim that the shared core and lifecycle integration are robust across interfaces, not merely in one lucky Composition graph.
+
+\subsection{Correctness and determinism}
+
+Validation covered more than runtime:
+
+\begin{itemize}
+  \item pose, edge, and depth structure remained effective;
+  \item no systematic quality degradation was observed relative to the tested recursive baseline;
+  \item slot-order bias behaved as declared through $\alpha$;
+  \item inactive slots did not load or execute;
+  \item single-ControlNet native routing preserved ordinary behavior;
+  \item repeated model names shared cached bases but retained distinct per-run hint state;
+  \item positive and negative conditioning rows reused matching wrapper objects where safe; and
+  \item cleanup and repeated execution remained stable.
+\end{itemize}
+
+\section{Corrected Interpretation of the Performance Question}
+
+\subsection{What the initial hypothesis got right}
+
+The initial focus on recursive chaining correctly identified several real issues:
+
+\begin{itemize}
+  \item the execution structure was hidden behind simple Apply nodes;
+  \item residual merging involved nested ownership and avoidable allocations;
+  \item state inheritance through \code{previous\_controlnet} made independent reasoning difficult;
+  \item model/hook/lifecycle traversal required careful compatibility work;
+  \item explicit flat fusion made weights and order bias inspectable; and
+  \item a single sampler-facing wrapper enabled one coherent composition policy.
+\end{itemize}
+
+\subsection{What the later investigation corrected}
+
+The later audit established that:
+
+\begin{itemize}
+  \item native recursion is still $O(n)$ in child forward evaluations;
+  \item multiple ControlNets necessarily cost more than one;
+  \item staged size is not physical simultaneous residency;
+  \item lazy hint preparation can make one denoising boundary unusually expensive;
+  \item extensive LoRA patching changes offload behavior; and
+  \item forced \code{--lowvram} was the main cause of the catastrophic multi-hour test state.
+\end{itemize}
+
+The corrected theory is stronger because it no longer depends on blaming recursion for every symptom.
+
+\subsection{Why non-recursive composition remains worthwhile}
+
+Even after the correction, the architecture offers durable advantages:
+
+\begin{enumerate}
+  \item \textbf{Explicit mathematics.} The final residual is visibly $\sum W_iC_i(x)$.
+  \item \textbf{Independent child state.} No child inherits another child’s chain during evaluation.
+  \item \textbf{Controlled tensor ownership.} Only the first owned result is cloned; later merges are in place.
+  \item \textbf{Predictable model discovery.} Unique child models are exposed once.
+  \item \textbf{Correct scratch reporting.} Sequential temporary memory is represented by a maximum.
+  \item \textbf{Workflow flexibility.} Existing chains can be flattened, or children can be prepared directly.
+  \item \textbf{Native preservation.} One mathematically equivalent control remains native.
+  \item \textbf{Easier diagnostics.} Child order, weights, routing, cache use, and activation decisions can be logged explicitly.
+\end{enumerate}
+
+\section{DynamicVRAM and Operational Guidance}
+
+\subsection{Validated configuration}
+
+The release 2.0 baseline was validated with:
+
+\begin{table}[H]
+\centering
+\caption{Compatibility baseline.}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+Component & Validated configuration \\
+\midrule
+\ComfyUI{} tag relation & \code{v0.25.0-34-g2a61015} \\
+\ComfyUI{} commit & \path{2a610155821d670a2d8047e654e5fce96b790eb5} \\
+Commit date & 22 June 2026 \\
+Frontend & 1.45.19 \\
+Python & 3.10.11 \\
+PyTorch & 2.9.1+cu130 \\
+CUDA reported by PyTorch & 13.0 \\
+GPU & NVIDIA RTX 4090 Laptop, 16~GB VRAM \\
+Runtime mode & Normal VRAM; DynamicVRAM enabled; no forced \code{--lowvram} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Operational rule}
+
+For the validated 16~GB Flux workflow:
+
+\begin{quote}
+Allow \ComfyUI{} and DynamicVRAM to manage model residency normally. Do not force \code{--lowvram} unless a separate controlled test demonstrates that it is necessary and beneficial.
+\end{quote}
+
+The \JLC{} core should not impose a competing global residency policy. Its responsibilities are accurate model discovery, safe copies, correct temporary-memory reporting, and clean lifecycle forwarding.
+
+\section{MultiGPU Scope}
+
+The composed wrapper includes the interface attributes expected by current \ComfyUI{} code:
+
+\begin{lstlisting}[style=pythonstyle]
+self.previous_controlnet = None
+self.multigpu_clones = {}
+\end{lstlisting}
+
+These are compatibility shunts for single-device execution, not real MultiGPU support. \code{get\_instance\_for\_device()} returns the current wrapper, and \code{deepclone\_multigpu()} raises a clear error.
+
+Real MultiGPU support would require independently owned child model patchers on each device, device-aware hint state, explicit scheduling, transfer policy, cleanup, and hardware validation. It is intentionally outside the freeze because it cannot be responsibly advertised without a suitable test system.
+
+\section{Release 2.0 Technical Freeze Statement}
+
+\freeze{} --- As of 6 July 2026, the following architecture is accepted as the frozen \JLC{} \FluxOne{} non-recursive ControlNet baseline:
+
+\begin{enumerate}
+  \item Native Apply nodes continue to build ordinary \code{previous\_controlnet} chains.
+  \item Composition may extract a native chain in oldest-to-newest order, protect against cycles, clip it according to visible slots, and shallow-detach selected members.
+  \item Orchestrator interfaces may prepare independent child copies directly without constructing an intermediate native chain.
+  \item Cached base ControlNets remain unconditioned; all hint, strength, schedule, VAE, and linkage state belongs to per-run copies.
+  \item \code{deepcopy} is prohibited from normal composition and orchestration.
+  \item Every child participating in non-recursive fusion has \code{previous\_controlnet=None} and cleared inherited MultiGPU clone bookkeeping.
+  \item The sampler sees one \code{JLC\_ComposedControlNet} object.
+  \item Children are evaluated sequentially against the same sampler state.
+  \item The first contributing output tensor is cloned when the composite takes ownership.
+  \item Later outputs are accumulated into owned storage with weighted in-place addition.
+  \item Child output storage is never mutated by the composite.
+  \item Unique child model patchers are exposed through \code{get\_models()}.
+  \item Hooks, preparation, cleanup, copying, and inference-memory behavior are forwarded through the complete current compatibility surface.
+  \item Sequential scratch requirements are reported as the largest child requirement, not the sum.
+  \item No effective control yields pass-through; one effective control at final weight one yields native execution; weighted singles and multiple controls yield composed execution.
+  \item Mandatory per-child CUDA synchronization is disabled in the normal path and remains available only as a diagnostic option.
+  \item Orchestrator Advanced validates complete active-slot wiring before loading models and uses a shared cache of raw bases only.
+  \item Real MultiGPU cloning is explicitly unsupported.
+  \item The validated runtime recommendation is normal VRAM mode, optionally with DynamicVRAM, without forced \code{--lowvram}.
+\end{enumerate}
+
+No subsequent feature should alter these invariants without preserving this state in version control and rerunning the regression matrix.
+
+\section{Community-Level Theory Summary}
+
+The complete theory can be reduced to five statements:
+
+\begin{enumerate}
+  \item \textbf{Apply is not composition.} Apply constructs a linked native ControlNet chain.
+  \item \textbf{Native recursion is linear but nested.} It evaluates each child once, yet residual ownership, merge allocation, state inheritance, and lifecycle traversal are nested.
+  \item \textbf{Flat fusion is an alternative ownership model.} Independent child outputs can be summed explicitly after detaching their links.
+  \item \textbf{Performance is a system property.} Model forwards, hint preparation, VAE use, LoRA patching, DynamicVRAM, and launch mode can dominate the difference between architectures.
+  \item \textbf{The host model manager must remain authoritative.} A custom composer should expose models and requirements accurately rather than forcing residency.
+\end{enumerate}
+
+The contribution is therefore both an algorithm and a diagnostic framework. It offers an explicit residual algebra while preventing that algebra from being confused with every observed VRAM or runtime symptom.
+
+\section{Recommended Future Work}
+
+The freeze leaves several useful directions:
+
+\begin{enumerate}
+  \item Build a standardized benchmark harness that records per-step time, peak allocated and reserved VRAM, model load/unload events, hint-preparation boundaries, and output similarity across native and composed execution.
+  \item Add optional tensor-lifetime instrumentation to quantify merge-allocation savings directly.
+  \item Explore safe reuse of identical hint encodes within one run when model, image, VAE, resolution, and schedule permit it.
+  \item Test broader ControlNet architectures, including models that introduce uncommon output keys or list layouts.
+  \item Design real MultiGPU composition only when appropriate hardware is available.
+  \item Compare the \FluxOne{} residual-composition theory with the newer block-injection strategy developed independently for \FluxTwo{}.
+\end{enumerate}
+
+\appendix
+
+\section{Reference Pseudocode}
+
+\begin{lstlisting}[style=pythonstyle,caption={Complete conceptual non-recursive fusion.}]
+def compose_controlnets(children, weights, x, t, cond, batch, options):
+    combined = None
+
+    for child, weight in zip(children, weights):
+        if child is None or weight == 0:
+            continue
+
+        # Every child is detached: child.previous_controlnet is None.
+        output = child.get_control(x, t, cond, batch, options)
+        if output is None:
+            continue
+
+        if combined is None:
+            combined = {}
+
+        for key, values in output.items():
+            dst_values = combined.setdefault(key, [None] * len(values))
+            if len(dst_values) < len(values):
+                dst_values.extend([None] * (len(values) - len(dst_values)))
+
+            for index, value in enumerate(values):
+                if value is None:
+                    continue
+
+                if dst_values[index] is None:
+                    owned = value.clone()
+                    if weight != 1.0:
+                        owned.mul_(weight)
+                    dst_values[index] = owned
+                else:
+                    dst_values[index].add_(value, alpha=weight)
+
+        del output
+
+    return combined
+\end{lstlisting}
+
+\section{Regression Checklist}
+
+A release derived from this freeze should verify:
+
+\begin{enumerate}
+  \item One active ControlNet at final weight one routes through native execution.
+  \item One active ControlNet at non-unit final weight routes through the composed wrapper and preserves the exact scalar.
+  \item Two or more active children have \code{previous\_controlnet=None} during evaluation.
+  \item Extracted chain order is oldest to newest.
+  \item Skipped slots retain original $\alpha$ exponents.
+  \item Negative weights behave as declared.
+  \item First output tensors are cloned; later outputs are accumulated in place.
+  \item Child-owned tensors are not modified.
+  \item Keys and list positions introduced by later children are preserved.
+  \item Repeated shallow copies of one base model yield one unique model patcher in discovery.
+  \item Positive and negative conditioning rows reuse compatible wrapper objects where intended.
+  \item Disabled and zero-strength Apply Advanced stages do not load models.
+  \item Orchestrator Advanced missing-image errors occur before loading.
+  \item \code{SHARE\_PREVIOUS} resolves only after a prior named model.
+  \item Per-child CUDA synchronization is off by default.
+  \item Normal VRAM mode completes the standard heavy benchmark without a full-model unload cascade.
+  \item Forced \code{--lowvram} is not used for release validation.
+  \item MultiGPU attempts fail clearly rather than silently mixing ownership.
+\end{enumerate}
+
+\section{Complexity and Memory Notes}
+
+Let $n$ be the number of active ControlNets, $F_i$ the cost of child $i$’s neural forward pass, $O_i$ its residual output size, and $S_i$ its temporary inference scratch.
+
+Both native sequential recursion and flat sequential composition require approximately:
+
+\[
+T_{\mathrm{forward}} \approx \sum_{i=1}^{n} F_i.
+\]
+
+The flat architecture does not change this fundamental sum.
+
+Its primary theoretical memory advantage is merge ownership. A simplified recursive out-of-place merge can require the prior aggregate, current output, and new aggregate at once. Streaming composition retains one owned aggregate and one current output:
+
+\[
+M_{\mathrm{flat\ merge}} \approx M_{\mathrm{accumulator}} + \max_i O_i,
+\]
+
+rather than repeatedly allocating a new full aggregate. Sequential scratch should be budgeted as:
+
+\[
+M_{\mathrm{scratch}} \approx \max_i S_i,
+\]
+
+while model weight residency remains a model-manager question involving all unique child patchers and the base diffusion model.
+
+\begin{thebibliography}{9}
+
+\bibitem{jlc_repo}
+J. L. C\'ordova,
+\emph{JLC ComfyUI Nodes},
+GitHub repository.
+\url{https://github.com/Damkohler/jlc-comfyui-nodes}
+
+\bibitem{jlc_docs}
+J. L. C\'ordova,
+\emph{ControlNet Composition and Orchestration},
+JLC ComfyUI Nodes documentation.
+\url{https://github.com/Damkohler/jlc-comfyui-nodes/blob/main/docs/controlnet-composition.md}
+
+\bibitem{jlc_v113}
+J. L. C\'ordova,
+\emph{JLC ComfyUI Nodes v1.1.3 --- ControlNet Composition (Non-Recursive Aggregation)},
+GitHub release, 7 April 2026.
+\url{https://github.com/Damkohler/jlc-comfyui-nodes/releases/tag/v1.1.3}
+
+\bibitem{jlc_v120}
+J. L. C\'ordova,
+\emph{Release v1.2.0 --- Deterministic Streaming ControlNet Composition},
+GitHub release, 10 April 2026.
+\url{https://github.com/Damkohler/jlc-comfyui-nodes/releases/tag/v1.2.0}
+
+\bibitem{jlc_v130}
+J. L. C\'ordova,
+\emph{v1.3.0 --- JLC ControlNet Orchestrator (Base \& Advanced)},
+GitHub release, 17 April 2026.
+\url{https://github.com/Damkohler/jlc-comfyui-nodes/releases/tag/v1.3.0}
+
+\bibitem{comfyui_controlnet}
+ComfyUI contributors,
+\emph{ComfyUI ControlNet implementation},
+GitHub.
+\url{https://github.com/comfyanonymous/ComfyUI/blob/master/comfy/controlnet.py}
+
+\bibitem{comfyui_pinned}
+ComfyUI contributors,
+\emph{ComfyUI source tree, pinned validation commit 2a610155821d670a2d8047e654e5fce96b790eb5},
+GitHub.
+\url{https://github.com/comfyanonymous/ComfyUI/tree/2a610155821d670a2d8047e654e5fce96b790eb5}
+
+\bibitem{flux_controlnet}
+XLabs-AI and ComfyUI contributors,
+\emph{Flux ControlNet architecture as integrated in ComfyUI},
+GitHub source history.
+\url{https://github.com/XLabs-AI/x-flux}
+
+\end{thebibliography}
+
+\end{document}

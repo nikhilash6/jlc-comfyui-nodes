@@ -269,19 +269,11 @@ Planned examples:
 
 Existing workflow asset placeholders:
 
-```markdown
-![Basic Inpainting / Outpainting](../assets/workflows/jlc_padded_image_Basic_Infill_Outfill.png)
+![Basic Inpainting / Outpainting](../assets/workflows/Release_2.0/jlc_Padded_Image_Infill_Outfill.png)
 
-[Download PNG](../assets/workflows/jlc_padded_image_Basic_Infill_Outfill.png) ·
-[Download JSON](../assets/workflows/jlc_padded_image_Basic_Infill_Outfill.json)
-```
+[Download PNG](../assets/workflows/Release_2.0/jlc_Padded_Image_Infill_Outfill.png) ·
+[Download JSON](../assets/workflows/Release_2.0/jlc_Padded_Image_Infill_Outfill.json)
 
-```markdown
-![Preferred Inpainting / Outpainting](../assets/workflows/jlc_padded_image_Best_Infill_Outfill.png)
-
-[Download PNG](../assets/workflows/jlc_padded_image_Best_Infill_Outfill.png) ·
-[Download JSON](../assets/workflows/jlc_padded_image_Best_Infill_Outfill.json)
-```
 
 ---
 

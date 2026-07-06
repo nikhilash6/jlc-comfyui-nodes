@@ -26,15 +26,40 @@
 >
 > The current implementation was validated against ComfyUI commit `2a610155` from June 22, 2026, with frontend package `1.45.19`. See the detailed ControlNet guide for the full compatibility baseline, benchmark context, and runtime recommendations.
 
-**JLC ComfyUI Nodes** is a practical custom-node collection for ComfyUI workflows that need cleaner ControlNet composition, padded inpainting/outpainting helpers, dynamic ControlNet auxiliary preprocessors, dynamic LoRA loading, and small workflow utilities.
+**JLC ComfyUI Nodes** is a custom-node collection built around Non-Recursive ControlNet Composition, a method introduced by this project to replace recursively nested multi-ControlNet evaluation with a flattened composition path whose execution cost scales approximately linearly with the number of applied ControlNets, rather than accumulating the severe repeated work, runtime growth, and memory pressure of native recursive chains.
 
-The collection is developed by **J. L. Córdova** and is especially focused on Flux-oriented image-generation pipelines, LoRA experimentation, ControlNet-heavy workflows, inpainting/outpainting, and multi-stage inference setups.
+The collection also includes supporting tools for padded inpainting and outpainting, dynamic ControlNet auxiliary preprocessing, dynamic LoRA loading, stage-boundary VRAM cleanup, and other practical workflow utilities.
+
+Developed by J. L. Córdova, the project is especially focused on Flux-oriented image-generation pipelines, ControlNet-heavy workflows, multi-stage inference, LoRA experimentation, and advanced inpainting and outpainting.
+
+---
+
+## Start Here: Release 2.0 Showcase Workflows
+
+These showcase workflows demonstrate the breadth of the node pack and provide practical starting points for exploring Release 2.0.
+
+The **JLC ControlNet Orchestrator (Advanced)** workflow serves both as an approachable starting point for new users and as a reference implementation of the package’s non-recursive ControlNet composition system.
+
+![JLC Orchestrator Advanced Workflow](assets/workflows/Release_2.0/jlc_Orchestrator_Advanced_workflow.png)
+
+[Download PNG workflow](assets/workflows/Release_2.0/jlc_Orchestrator_Advanced_workflow.png) ·
+[Download JSON workflow](assets/workflows/Release_2.0/jlc_Orchestrator_Advanced_workflow.json)
+
+The **JLC All-In-One Workflow** presents the collection as a complete working toolchain rather than a set of isolated nodes. It combines ControlNet with representative nodes from the ControlNet Aux, Dynamic LoRA Loader, padded-image and padded-latent, and utility families.
+
+![JLC All-In-One Workflow](assets/workflows/Release_2.0/jlc_All_In_One_Workflow.png)
+
+[Download PNG workflow](assets/workflows/Release_2.0/jlc_All_In_One_Workflow.png) ·
+[Download JSON workflow](assets/workflows/Release_2.0/jlc_All_In_One_Workflow.json)
+
+As with the other workflows included in this documentation, each example is provided both as a PNG with an embedded workflow for direct drag-and-drop into ComfyUI and as a JSON file for standard workflow loading.
 
 ---
 
 ## Documentation
 
-This README is the front page for the repository. Detailed documentation is split by node family:
+This README is the front page for the repository. Detailed documentation is
+organized by node family:
 
 1. [ControlNet Composition and Orchestration](docs/controlnet-composition.md)
 2. [Padded Image / Padded Latent](docs/padded-image-latent.md)
@@ -135,7 +160,7 @@ This family includes:
 
 The repository includes example ComfyUI workflows in `assets/workflows/`. PNG workflows contain embedded ComfyUI graphs and can be dragged directly onto the ComfyUI canvas.
 
-The front-page showcase workflow for this release is a compact ControlNet orchestration example. It demonstrates a practical combination of JLC nodes in one workflow, including dynamic LoRA loading, ControlNet Aux preprocessing, seed/display utility behavior, and JLC ControlNet orchestration.
+The showcase workflow for this release, shown at the top of the page, is a complete JLC ControlNet orchestration example. It demonstrates a practical combination of multiple JLC nodes in one workflow, including use of the LoRA loaders with dynamic slot selection, Padded Image, ControlNet Aux preprocessing, seed/display utility behavior, and the flagship node: JLC ControlNet Orchestrator (Advanced).
 
 ### Release 1.5 Showcase Workflow
 
