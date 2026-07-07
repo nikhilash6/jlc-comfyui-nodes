@@ -154,24 +154,6 @@ This family includes:
 
 [Read the Utility Nodes guide](docs/utility-nodes.md)
 
----
-
-## Example Workflows
-
-The repository includes example ComfyUI workflows in `assets/workflows/`. PNG workflows contain embedded ComfyUI graphs and can be dragged directly onto the ComfyUI canvas.
-
-The showcase workflow for this release, shown at the top of the page, is a complete JLC ControlNet orchestration example. It demonstrates a practical combination of multiple JLC nodes in one workflow, including use of the LoRA loaders with dynamic slot selection, Padded Image, ControlNet Aux preprocessing, seed/display utility behavior, and the flagship node: JLC ControlNet Orchestrator (Advanced).
-
-### Release 1.5 Showcase Workflow
-
-![JLC Orchestrator Showcase Workflow](assets/workflows/Release_1.5/Orchestrator_Workflow.png)
-
-[Download PNG workflow](assets/workflows/Release_1.5/Orchestrator_Workflow.png) ·
-[Download JSON workflow](assets/workflows/Release_1.5/Orchestrator_Workflow.json)
-
-PNG workflows contain embedded ComfyUI graphs and may be dragged directly into the ComfyUI canvas. The JSON version is provided as a plain workflow backup for users who prefer explicit import files.
-
-Additional ControlNet workflow placeholders and documentation targets are listed in the [ControlNet guide](docs/controlnet-composition.md).
 
 ---
 
