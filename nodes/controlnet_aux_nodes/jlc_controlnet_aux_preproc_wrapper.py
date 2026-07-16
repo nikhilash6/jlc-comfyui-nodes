@@ -53,8 +53,16 @@ JLC Dynamic Aux Preprocessor Wrapper
     • Frontend JavaScript may hide widgets and output sockets above slot_count.
     • Hidden slot values remain serialized in workflow JSON.
     • Backend execution ignores hidden slots.
-    • Hidden output slots return the source image as a passthrough placeholder
-      so the static return shape remains stable.
+    • DISABLED slots and hidden slots emit a genuine null (`None`) runtime
+      value while retaining statically typed IMAGE output sockets.
+    • No blank tensor or source-image passthrough is fabricated for absence.
+
+- Null-Signal Contract
+    ComfyUI validates graph links from declared socket types and then forwards
+    runtime values without coercing them into tensors. The wrapper therefore
+    keeps IMAGE sockets for normal workflow wiring but uses `None` as the
+    deliberate absent-control signal. JLC ControlNet consumers must either omit
+    optional null slots or reject null on required inputs with a clear error.
 
 - First-Use Model Note
     Some upstream ControlNet Aux preprocessors may download or load large
@@ -96,10 +104,12 @@ MANIFEST = {
         "preprocessors provided by Fannovel16's comfyui_controlnet_aux package. "
         "Predeclares up to ten preprocessor slots and treats slot_count as "
         "authoritative while frontend JavaScript hides/shows rows and output "
-        "sockets. Exposes preprocessors with IMAGE input, optional/shared "
-        "resolution, IMAGE-only output, and defaultable extra parameters; "
-        "special-output preprocessors should be used through their native "
-        "ControlNet Aux nodes."
+        "sockets. DISABLED and hidden slots emit a genuine None runtime value "
+        "through the statically typed IMAGE socket rather than fabricating a "
+        "blank image or passing through the source. Exposes preprocessors with "
+        "IMAGE input, optional/shared resolution, IMAGE-only output, and "
+        "defaultable extra parameters; special-output preprocessors should be "
+        "used through their native ControlNet Aux nodes."
     ),
 }
 
@@ -454,36 +464,50 @@ def _build_aux_params(aux_class: Any, image: Any, resolution: int) -> Dict[str, 
 def _extract_image_from_result(preprocessor_name: str, result: Any) -> Any:
     """
     Extract IMAGE from standard Comfy tuple return or a Comfy dict return.
-    The structural gate should already exclude multi-output nodes, but this
-    helper gives a clearer error if an aux node changes behavior upstream.
-    """
-    if isinstance(result, tuple) and len(result) > 0:
-        return result[0]
 
-    if isinstance(result, dict):
+    A selected, active upstream preprocessor returning None is treated as an
+    upstream failure, not as the wrapper's deliberate DISABLED signal. This
+    prevents accidental preprocessor failures from being silently omitted by a
+    downstream optional ControlNet slot.
+    """
+    image = None
+
+    if isinstance(result, tuple) and len(result) > 0:
+        image = result[0]
+    elif isinstance(result, dict):
         payload = result.get("result")
         if isinstance(payload, tuple) and len(payload) > 0:
-            return payload[0]
-        if isinstance(payload, list) and len(payload) > 0:
-            return payload[0]
+            image = payload[0]
+        elif isinstance(payload, list) and len(payload) > 0:
+            image = payload[0]
+        else:
+            raise RuntimeError(
+                f"Preprocessor '{preprocessor_name}' returned an unsupported "
+                f"result payload: {type(payload)}"
+            )
+    else:
+        raise RuntimeError(
+            f"Preprocessor '{preprocessor_name}' returned an unsupported result shape: "
+            f"{type(result)}"
+        )
 
-    raise RuntimeError(
-        f"Preprocessor '{preprocessor_name}' returned an unsupported result shape: "
-        f"{type(result)}"
-    )
+    if image is None:
+        raise RuntimeError(
+            f"Active preprocessor '{preprocessor_name}' returned no IMAGE (None). "
+            "Use DISABLED for an intentional null slot, or use the native "
+            "preprocessor node to diagnose its empty output."
+        )
+
+    return image
 
 
 # ------------------------------------------------------------
 # Helper: execute one selected preprocessor
 # ------------------------------------------------------------
 def _run_preprocessor(preprocessor_name: str, image: Any, resolution: int) -> Any:
-    """
-    Execute a single selected preprocessor.
-
-    DISABLED is a no-op passthrough in this wrapper.
-    """
+    """Execute one selected preprocessor or emit the deliberate null signal."""
     if preprocessor_name == "DISABLED":
-        return image
+        return None
 
     if not AUX_AVAILABLE:
         raise RuntimeError(
@@ -578,6 +602,9 @@ class JLC_DynamicAuxPreprocessorWrapper:
 
         return {"required": required}
 
+    # ComfyUI link validation uses these declared socket types, while runtime
+    # values are forwarded unchanged. DISABLED/hidden outputs therefore remain
+    # wire-compatible IMAGE sockets whose actual value is the null signal None.
     RETURN_TYPES = tuple(["IMAGE"] * MAX_SLOTS)
     RETURN_NAMES = tuple([f"image_{i:02d}" for i in range(1, MAX_SLOTS + 1)])
     FUNCTION = "execute"
@@ -596,9 +623,9 @@ class JLC_DynamicAuxPreprocessorWrapper:
             suffix = f"{i:02d}"
 
             if i > count:
-                # Hidden slots are intentionally ignored by backend execution.
-                # Return passthrough image to keep Comfy's static return arity stable.
-                outputs.append(image)
+                # Hidden slots are inactive even if their serialized dropdown
+                # values or downstream links remain in the workflow JSON.
+                outputs.append(None)
                 continue
 
             preprocessor_name = kwargs.get(f"preprocessor_{suffix}", "DISABLED")

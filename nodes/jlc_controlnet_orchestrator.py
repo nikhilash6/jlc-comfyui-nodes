@@ -31,6 +31,7 @@ JLC ControlNet Orchestrator
         • independent hint, strength, start, end, and weight controls
           for each active slot
         • isolated per-run ControlNet preparation
+        • deliberate null-image handling: a `None` hint disables only its slot
         • optional order bias through the global `alpha` parameter
         • weighted non-recursive fusion through the shared JLC core
 
@@ -128,8 +129,9 @@ MANIFEST = {
     "description": (
         "External-input multi-ControlNet orchestrator using the validated JLC "
         "non-recursive weighted-fusion core. Accepts ControlNet objects from "
-        "upstream loaders, applies isolated per-slot conditioning, supports "
-        "order-biased weights, routes mathematically equivalent single-ControlNet "
+        "upstream loaders, applies isolated per-slot conditioning, disables only "
+        "the corresponding slot when its runtime hint is None, supports order-biased "
+        "weights, routes mathematically equivalent single-ControlNet "
         "cases through the native path, and preserves compatibility with current "
         "ComfyUI sampler and model-management interfaces."
     ),
@@ -205,7 +207,10 @@ class JLC_ControlNetOrchestrator:
                 inactive_reasons[i] = "no_controlnet"
                 continue
             if image is None:
-                inactive_reasons[i] = "no_image"
+                # Runtime None is the deliberate absent-image signal used by
+                # DISABLED/hidden Aux Wrapper outputs. It also covers an
+                # unconnected optional image socket. Disable only this slot.
+                inactive_reasons[i] = "image_none"
                 continue
             if strength == 0:
                 inactive_reasons[i] = "strength_zero"

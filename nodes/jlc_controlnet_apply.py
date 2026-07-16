@@ -22,7 +22,8 @@ JLC ControlNet Apply
     ComfyUI ControlNet chaining semantics.
 
   - This node is intentionally simple and native-facing:
-        • the hint image is a required input and is validated by ComfyUI;
+        • the hint image is a required input; an active node explicitly rejects
+          a runtime `None` value with a clear error before tensor operations;
         • the incoming ControlNet is copied before conditioning state is applied;
         • previously attached ControlNets are preserved through
           `set_previous_controlnet(prev_cnet)`;
@@ -58,7 +59,8 @@ MANIFEST = {
     "description": (
         "Native-style ControlNet apply node for chained workflows. Applies one "
         "ControlNet to positive and negative conditioning, preserves existing "
-        "previous_controlnet chains, supports pass-through disabling, and passes "
+        "previous_controlnet chains, supports pass-through disabling, rejects a "
+        "null runtime hint on active execution with a clear error, and passes "
         "ControlNet/VAE objects forward for tidy multi-node pipelines."
     ),
 }
@@ -102,6 +104,16 @@ class JLC_ControlNetApply:
     ):
         if (not enabled) or strength == 0:
             return (positive, negative, control_net, vae)
+
+        if image is None:
+            message = (
+                "JLC ControlNet Apply: active execution received None for the required "
+                "image input. This usually means the image socket is disconnected or "
+                "is linked to a DISABLED/hidden JLC Aux Wrapper output. Connect a valid "
+                "hint image, or disable this Apply node / set strength to 0."
+            )
+            print(f"[JLC-ControlNet Apply][ERROR] {message}")
+            raise RuntimeError(message)
 
         if extra_concat is None:
             extra_concat = []

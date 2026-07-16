@@ -246,15 +246,15 @@ class JLC_PaddedImage:
         mask_out = self.pil2masktensor(padded_mask)
 
         return (
-            image_padded.to(dtype=torch.float16),
-            mask_out.to(dtype=torch.float16),
+            image_padded.to(dtype=torch.float32),
+            mask_out.to(dtype=torch.float32),
             int(new_dim_x),
             int(new_dim_y),
             paddedQ,
         )
 
     def create_mask(self, scaled_dim_x, scaled_dim_y, offsets_x, offsets_y, feathering):
-        msk = np.zeros((scaled_dim_x, scaled_dim_y), dtype=np.float16)
+        msk = np.zeros((scaled_dim_x, scaled_dim_y), dtype=np.float32)
 
         if 0 < feathering < scaled_dim_x / 2 and feathering < scaled_dim_y / 2:
             msk = msk[feathering-1:-(feathering-1), feathering-1:-(feathering-1)]
@@ -392,15 +392,15 @@ class JLC_PaddedImage:
     # --- Conversion helpers ---
 
     def tensor2pil(self, image):
-        image = image.squeeze(0).to(dtype=torch.float16).cpu().numpy()
+        image = image.squeeze(0).to(dtype=torch.float32).cpu().numpy()
         image = (image * 255).clip(0, 255).astype(np.uint8)
         if image.ndim == 3 and image.shape[-1] == 3:
             return Image.fromarray(image, mode="RGB")
         return Image.fromarray(image, mode="L")
 
     def pil2tensor(self, image):
-        image = np.array(image).astype(np.float16) / 255.0
-        return torch.from_numpy(image).unsqueeze(0).to(dtype=torch.float16)
+        image = np.array(image).astype(np.float32) / 255.0
+        return torch.from_numpy(image).unsqueeze(0).to(dtype=torch.float32)
 
     def masktensor2pil(self, mask):
         """
@@ -430,8 +430,8 @@ class JLC_PaddedImage:
         """
         if mask_pil.mode != "L":
             mask_pil = mask_pil.convert("L")
-        arr = np.array(mask_pil).astype(np.float16) / 255.0
-        return torch.from_numpy(arr).unsqueeze(0).to(dtype=torch.float16)
+        arr = np.array(mask_pil).astype(np.float32) / 255.0
+        return torch.from_numpy(arr).unsqueeze(0).to(dtype=torch.float32)
 
 
 NODE_CLASS_MAPPINGS = {

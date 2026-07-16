@@ -63,6 +63,8 @@ from .nodes.lora_loader_nodes.jlc_lora_loader_legacy_dynamic_wrappers import (
 # Utility Nodes
 from .nodes.util_nodes.jlc_seed_generator import JLC_SeedGenerator
 from .nodes.util_nodes.jlc_stage_boundary_vram_cleanup import JLC_StageBoundaryVRAMCleanup
+from .nodes.util_nodes.jlc_load_and_resize_image import JLC_LoadAndResizeImage
+from .nodes.util_nodes.jlc_resize_image import JLC_ResizeImage
 
 
 NODE_CLASS_MAPPINGS = {
@@ -94,6 +96,8 @@ NODE_CLASS_MAPPINGS = {
     # Utility Nodes
     "JLC_SeedGenerator": JLC_SeedGenerator,
     "JLC_StageBoundaryVRAMCleanup": JLC_StageBoundaryVRAMCleanup,
+    "JLC_LoadAndResizeImage": JLC_LoadAndResizeImage,
+    "JLC_ResizeImage": JLC_ResizeImage,
 }
 
 
@@ -124,6 +128,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     # Utility Nodes
     "JLC_SeedGenerator": "\u2003JLC Seed Generator",
     "JLC_StageBoundaryVRAMCleanup": "\u2003JLC Stage Boundary VRAM Cleanup",
+    "JLC_LoadAndResizeImage": "\u2003JLC Load & Resize Image",
+    "JLC_ResizeImage": "\u2003JLC Resize Image",
 }
 
 

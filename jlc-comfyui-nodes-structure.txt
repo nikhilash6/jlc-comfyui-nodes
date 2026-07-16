@@ -1,12 +1,11 @@
 JLC ComfyUI Nodes Project Structure
-Generated: 2026-06-27 23:37:10
+Generated: 2026-07-15 23:44:58
 Root: C:\Users\josel\Stable_Diffusion\ComfyUI_V89\custom_nodes\JLC-ComfyUI-nodes
 Output: C:\Users\josel\Stable_Diffusion\ComfyUI_V89\custom_nodes\JLC-ComfyUI-nodes\jlc-comfyui-nodes-structure.txt
 Gitignore: C:\Users\josel\Stable_Diffusion\ComfyUI_V89\custom_nodes\JLC-ComfyUI-nodes\.gitignore
 MaxDepth: unlimited
 
 JLC-ComfyUI-nodes/
-  .quarantined/
   assets/
     icons/
       jlc-comfyui-nodes_Logo-0032.png
@@ -24,23 +23,42 @@ JLC-ComfyUI-nodes/
       jlc-comfyui-nodes_Logo-Dark-1024.png
       jlc-comfyui-nodes_Logo-Dark-1436.png
     workflows/
-      example_composition_01.png
-      example_composition_02.png
-      example_recursive_01.png
-      example_recursive_02.png
-      jlc_ControlNet_Apply_Advanced.json
-      jlc_ControlNet_Apply_Advanced.png
-      jlc_ControlNet_Composition.json
-      jlc_ControlNet_Composition.png
-      JLC_ControlNet_Orchestrator_Advanced_WorkFlow.json
-      JLC_ControlNet_Orchestrator_Advanced_WorkFlow.png
-      JLC_ControlNet_Orchestrator_WorkFlow.json
-      JLC_ControlNet_Orchestrator_WorkFlow.png
-      jlc_padded_image_Basic_Infill_Outfill.json
-      jlc_padded_image_Basic_Infill_Outfill.png
-      jlc_padded_image_Best_Infill_Outfill.json
-      jlc_padded_image_Best_Infill_Outfill.png
+      Release_1.0/
+        example_composition_01.png
+        example_composition_02.png
+        example_recursive_01.png
+        example_recursive_02.png
+        jlc_ControlNet_Apply_Advanced.json
+        jlc_ControlNet_Apply_Advanced.png
+        jlc_ControlNet_Composition.json
+        jlc_ControlNet_Composition.png
+        JLC_ControlNet_Orchestrator_Advanced_WorkFlow.json
+        JLC_ControlNet_Orchestrator_Advanced_WorkFlow.png
+        JLC_ControlNet_Orchestrator_WorkFlow.json
+        JLC_ControlNet_Orchestrator_WorkFlow.png
+        jlc_padded_image_Basic_Infill_Outfill.json
+        jlc_padded_image_Basic_Infill_Outfill.png
+        jlc_padded_image_Best_Infill_Outfill.json
+        jlc_padded_image_Best_Infill_Outfill.png
+      Release_2.0/
+        jlc_All_In_One_workflow.json
+        jlc_All_In_One_workflow.png
+        jlc_ControlNet_Auxiliary_Preproc_workflow.json
+        jlc_ControlNet_Auxiliary_Preproc_workflow.png
+        jlc_ControlNet_Composition.json
+        jlc_ControlNet_Composition.png
+        jlc_LoRA_loaders.json
+        jlc_LoRA_loaders.png
+        jlc_Orchestrator_Advanced_workflow.json
+        jlc_Orchestrator_Advanced_workflow.png
+        jlc_Padded_Image_Infill_Outfill.json
+        jlc_Padded_Image_Infill_Outfill.png
   docs/
+    controlnet-aux.md
+    controlnet-composition.md
+    lora-loaders.md
+    padded-image-latent.md
+    utility-nodes.md
   nodes/
     controlnet_aux_nodes/
       __init__.py
@@ -61,15 +79,17 @@ JLC-ComfyUI-nodes/
       jlc_lora_model_only_filter.py
     util_nodes/
       __init__.py
+      jlc_load_and_resize_image.py
+      jlc_resize_image.py
       jlc_seed_generator.py
       jlc_stage_boundary_vram_cleanup.py
       TODO_seed_generator_randomize_replay.md
     __init__.py
     jlc_controlnet_apply_advanced.py
     jlc_controlnet_apply.py
-    jlc_controlnet_composition_core.py
     jlc_controlnet_composition.py
-    jlc_controlnet_orchestrator_adv_dynamic.py
+    jlc_controlnet_nonrecursive_core.py
+    jlc_controlnet_orchestrator_adv.py
     jlc_controlnet_orchestrator.py
     jlc_padded_image.py
     jlc_padded_latent.py
@@ -80,7 +100,10 @@ JLC-ComfyUI-nodes/
     jlc_dynamic_controlnet_aux_preproc_visibility.js
     jlc_dynamic_controlnet_composition_visibility.js
     jlc_dynamic_controlnet_orchestrator_adv_visibility.js
+    jlc_dynamic_controlnet_orchestrator_visibility.js
     jlc_dynamic_lora_loader_visibility.js
+    jlc_frontend_boolean_and.js
+    jlc_load_and_resize_image_visibility.js
     jlc_node_icons.js
     jlc_seed_display.js
   __init__.py
@@ -92,7 +115,7 @@ JLC-ComfyUI-nodes/
   README.md
 
 Summary:
-  Folders shown: 14
-  Files shown:   71
-  Items skipped: 14
-  Gitignore patterns loaded: 39
+  Folders shown: 15
+  Files shown:   93
+  Items skipped: 18
+  Gitignore patterns loaded: 54

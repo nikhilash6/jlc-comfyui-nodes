@@ -27,7 +27,8 @@ JLC ControlNet Orchestrator (Advanced)
         • `SHARE_PREVIOUS` reuse of the most recently selected model
         • independent hint, strength, start, end, and weight controls
           for each slot
-        • strict slot validation before any ControlNet model is loaded
+        • strict slot preflight before any ControlNet model is loaded
+        • deliberate null-image handling: a `None` hint disables only its slot
         • optional order bias through the global `alpha` parameter
 
   - Each active slot:
@@ -130,7 +131,8 @@ MANIFEST = {
         "Integrated internal-loader multi-ControlNet orchestrator using the "
         "shared JLC model cache and validated non-recursive weighted-fusion "
         "core. Supports dynamic slots, SHARE_PREVIOUS model reuse, strict "
-        "preflight before model loading, independent per-slot conditioning, "
+        "preflight before model loading, null-image slot disabling, independent "
+        "per-slot conditioning, "
         "order-biased weights, native single-ControlNet routing when "
         "mathematically equivalent, and current ComfyUI sampler and "
         "model-management compatibility."
@@ -211,7 +213,10 @@ class JLC_ControlNetOrchestratorAdvanced:
                 "tooltip": "ControlNet model for this slot. SHARE_PREVIOUS reuses the last selected model."
             })
             optional[f"image_{idx}"] = ("IMAGE", {
-                "tooltip": "Control image for this slot. Required when this slot is selected/reused and otherwise active."
+                "tooltip": (
+                    "Control image for this slot. A disconnected socket or runtime None "
+                    "(including a DISABLED/hidden aux-wrapper output) disables only this slot."
+                )
             })
             optional[f"strength_{idx}"] = ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.01})
             optional[f"start_{idx}"] = ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.001})
@@ -287,13 +292,14 @@ class JLC_ControlNetOrchestratorAdvanced:
                 continue
 
             if image is None:
-                raise RuntimeError(
-                    f"JLC ControlNet Orchestrator Advanced: slot {i} is active "
-                    f"({source} ControlNet '{resolved_name}', strength={strength}, "
-                    f"weight={weight}, range=({start}, {end})) but image_{idx} is not connected. "
-                    "Connect a hint image, set the slot to DISABLED, set strength/weight to 0, "
-                    "or set an empty range."
-                )
+                inactive_reasons[i] = "image_none"
+                if DEBUG:
+                    print(
+                        f"[JLC-Orchestrator-Advanced] slot={i} disabled because "
+                        f"image_{idx} received None (disconnected or DISABLED/hidden "
+                        f"aux output); selected source={source} model='{resolved_name}'."
+                    )
+                continue
 
             resolved_specs.append({
                 "slot": i,

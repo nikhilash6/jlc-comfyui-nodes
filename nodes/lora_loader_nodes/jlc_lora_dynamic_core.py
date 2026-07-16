@@ -492,6 +492,87 @@ def _looks_like_clip_or_text_key(key: Any) -> bool:
     )
 
 
+# Diffusers FLUX.2 uses top-level names that current ComfyUI Flux LoRA
+# mapping does not expose.  The target names below are ComfyUI's native
+# FLUX.2 BaseModel state-dict names.  This table intentionally covers only
+# the seven known top-level modules; ordinary block keys remain entirely
+# under ComfyUI's standard mapping.
+_FLUX2_TOP_LEVEL_LORA_PREFIX_MAP: Dict[str, str] = {
+    "transformer.double_stream_modulation_img.linear.":
+        "diffusion_model.double_stream_modulation_img.lin.",
+    "transformer.double_stream_modulation_txt.linear.":
+        "diffusion_model.double_stream_modulation_txt.lin.",
+    "transformer.single_stream_modulation.linear.":
+        "diffusion_model.single_stream_modulation.lin.",
+    "transformer.time_guidance_embed.timestep_embedder.linear_1.":
+        "diffusion_model.time_in.in_layer.",
+    "transformer.time_guidance_embed.timestep_embedder.linear_2.":
+        "diffusion_model.time_in.out_layer.",
+    "transformer.time_guidance_embed.guidance_embedder.linear_1.":
+        "diffusion_model.guidance_in.in_layer.",
+    "transformer.time_guidance_embed.guidance_embedder.linear_2.":
+        "diffusion_model.guidance_in.out_layer.",
+}
+
+
+def _normalize_flux2_top_level_lora_keys(
+    model: Any,
+    lora_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Remap the seven Diffusers-format FLUX.2 top-level LoRA prefixes to the
+    native ComfyUI FLUX.2 parameter names.
+
+    The remap is activated only when the corresponding target weights are
+    present in the supplied model, so Flux.1 and unrelated architectures are
+    left unchanged.  Tensor storage is not copied; only a shallow state-dict
+    containing the same tensor references is created when a remap is needed.
+    """
+    try:
+        model_keys = set(model.model.state_dict().keys())
+    except (AttributeError, TypeError):
+        return lora_state
+
+    active_prefixes = {
+        source: target
+        for source, target in _FLUX2_TOP_LEVEL_LORA_PREFIX_MAP.items()
+        if f"{target}weight" in model_keys
+        and any(str(key).startswith(source) for key in lora_state)
+    }
+
+    if not active_prefixes:
+        return lora_state
+
+    normalized = dict(lora_state)
+    remapped = 0
+
+    for old_key in list(lora_state.keys()):
+        old_name = str(old_key)
+
+        for source, target in active_prefixes.items():
+            if not old_name.startswith(source):
+                continue
+
+            new_key = f"{target}{old_name[len(source):]}"
+
+            # Prefer an already-native tensor if a mixed-format file contains
+            # both names.  Remove the unsupported Diffusers alias either way
+            # so ComfyUI does not emit a false remaining-key warning.
+            if new_key not in normalized:
+                normalized[new_key] = lora_state[old_key]
+            normalized.pop(old_key, None)
+            remapped += 1
+            break
+
+    if remapped:
+        print(
+            "[JLC-LoRA] Remapped "
+            f"{remapped} FLUX.2 top-level LoRA tensors to native ComfyUI keys."
+        )
+
+    return normalized
+
+
 def apply_lora_model_only(model: Any, lora_state: Dict[str, Any], strength_model: float) -> Any:
     """
     Apply LoRA patches to MODEL only.
@@ -503,8 +584,9 @@ def apply_lora_model_only(model: Any, lora_state: Dict[str, Any], strength_model
     if float(strength_model) == 0.0:
         return model
 
+    normalized_state = _normalize_flux2_top_level_lora_keys(model, lora_state)
     key_map = comfy.lora.model_lora_keys_unet(model.model)
-    loaded = comfy.lora.load_lora(lora_state, key_map)
+    loaded = comfy.lora.load_lora(normalized_state, key_map)
 
     new_model = model.clone()
 
@@ -531,10 +613,11 @@ def apply_lora_model_clip(
     if float(strength_model) == 0.0 and float(strength_clip) == 0.0:
         return model, clip
 
+    normalized_state = _normalize_flux2_top_level_lora_keys(model, lora_state)
     return comfy.sd.load_lora_for_models(
         model,
         clip,
-        lora_state,
+        normalized_state,
         float(strength_model),
         float(strength_clip),
     )
@@ -555,10 +638,11 @@ def apply_lora_clip_only(
     if clip is None or float(strength_clip) == 0.0:
         return clip
 
+    normalized_state = _normalize_flux2_top_level_lora_keys(model, lora_state)
     _unused_model, new_clip = comfy.sd.load_lora_for_models(
         model,
         clip,
-        lora_state,
+        normalized_state,
         0.0,
         float(strength_clip),
     )
@@ -640,8 +724,9 @@ def compute_model_block_weights(
     if not vector:
         raise ValueError("block_vector cannot be empty")
 
+    normalized_state = _normalize_flux2_top_level_lora_keys(model, lora_state)
     key_map = comfy.lora.model_lora_keys_unet(model.model)
-    loaded = comfy.lora.load_lora(lora_state, key_map)
+    loaded = comfy.lora.load_lora(normalized_state, key_map)
 
     input_blocks: List[Tuple[Any, Any, int]] = []
     middle_blocks: List[Tuple[Any, Any, int]] = []

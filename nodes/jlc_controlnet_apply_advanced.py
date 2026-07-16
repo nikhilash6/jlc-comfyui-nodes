@@ -35,7 +35,8 @@ JLC ControlNet Apply (Advanced)
     cached base objects are never passed through `set_cond_hint()`.
 
   - Native ComfyUI chain semantics are preserved:
-        • the hint image is a required input and is validated by ComfyUI;
+        • the hint image is a required input; an active node explicitly rejects
+          a runtime `None` value with a clear error before model loading or tensor work;
         • previous ControlNets already attached to conditioning are preserved
           through `set_previous_controlnet(prev_cnet)`;
         • disabled or zero-strength operation exits before any dropdown model
@@ -80,8 +81,9 @@ MANIFEST = {
     "description": (
         "ControlNet apply node with optional internal dropdown loading through "
         "the shared JLC model residency cache. Preserves native ControlNet chain "
-        "semantics, applies conditioning only to per-run copies, and avoids model "
-        "loading when disabled or strength is zero."
+        "semantics, applies conditioning only to per-run copies, rejects a null "
+        "runtime hint on active execution, and avoids model loading when disabled "
+        "or strength is zero."
     ),
 }
 
@@ -178,6 +180,17 @@ class JLC_ControlNetApplyAdvanced:
             if DEBUG:
                 print(f"[JLC-ControlNet] Node idle (enabled={enabled}, strength={strength})")
             return (positive, negative, vae, control_net)
+
+        if image is None:
+            message = (
+                "JLC ControlNet Apply (Advanced): active execution received None for "
+                "the required image input. This usually means the image socket is "
+                "disconnected or is linked to a DISABLED/hidden JLC Aux Wrapper "
+                "output. Connect a valid hint image, or disable this Apply node / "
+                "set strength to 0."
+            )
+            print(f"[JLC-ControlNet Apply Advanced][ERROR] {message}")
+            raise RuntimeError(message)
 
         if control_net_name == CONTROLNET_NONE_LABEL:
             control_net_name = None

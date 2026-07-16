@@ -3,6 +3,15 @@ import { app } from "/scripts/app.js";
 const ICON_SIZE = 12;
 const JLC_PREFIX = "JLC_";
 
+// Explicitly registered current-repo nodes. The prefix fallback below continues
+// to brand existing JLC_ classes, while this set documents newly added nodes.
+const EXPLICIT_NODE_NAMES = new Set([
+    "JLC_LoadAndResizeImage",
+    "JLC_ResizeImage",
+    // Compatibility with the earlier mapping-key suggestion.
+    "JLC Resize Image",
+]);
+
 // CaptionForge nodes are branded by the CaptionForge repo, not this repo.
 const EXCLUDED_PREFIXES = [
     "JLC_Qwen",
@@ -16,6 +25,10 @@ iconImage.src = "/extensions/JLC-ComfyUI-nodes/assets/icons/jlc-comfyui-nodes_Lo
 function isOldJlcNode(nodeData) {
     if (!nodeData || !nodeData.name) {
         return false;
+    }
+
+    if (EXPLICIT_NODE_NAMES.has(nodeData.name)) {
+        return true;
     }
 
     if (!nodeData.name.startsWith(JLC_PREFIX)) {
